@@ -223,7 +223,30 @@ def shuffle_split(c0, c1, balance_data=1):
         np.float32), x.astype(np.float32), y.astype(np.float32)
 
 
-def do_backtest(env, clfs, scaling=0, scalers=None,
+def get_X(data):
+    """Return matrix X"""
+    return data.filter(like='X').values
+
+
+def get_y(data):
+    """ Return dependent variable y """
+    y = data.Close.pct_change(1)  # Returns after roughly two days
+    y[y >= 0] = 1
+    y[y < 0] = 0
+    return y
+
+
+def get_clean_Xy(df):
+    """Return (X, y) cleaned of NaN values"""
+    X = get_X(df)
+    y = get_y(df).values
+    isnan = np.isnan(y)
+    X = X[~isnan]
+    y = y[~isnan]
+    return X, y
+
+
+def do_RL_backtest(env, clfs, scaling=0, scalers=None,
                 envs=None, callback=None,
                 do_plot=1, keras=0, proba=0, force_action=None, remove_outliers=0, outlier_bounds=None):
     binary = env.binary
