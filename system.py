@@ -11,6 +11,14 @@ from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
 from tqdm.notebook import tqdm
 
+def seed_everything(seed=0):
+    rnd.seed(seed)
+    np.random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+seed = 0
+while seed == 0:
+    seed = int(time.time() * 100000) % 1000000
+seed_everything(seed)
 
 def fix_data(data1, data2):
     data1 = data1[::-1]
@@ -64,28 +72,28 @@ except:
 def get_data(symbol, period='D'):
     if period == 'd': period = 'D'
     sfn = symbol + '_' + period
-    data = pkl.load(open(datadir + '/' + sfn + '.pkl', 'rb'))
+    data = pd.read_json(datadir + '/' + sfn + '.json')
     return data
 
 
 def get_data_proc(symbol, period='D'):
     if period == 'd': period = 'D'
     sfn = symbol + '_' + period
-    data = pkl.load(open(datadir + '/' + sfn + '_proc.pkl', 'rb'))
+    data = pd.read_json(datadir + '/' + sfn + '_proc.json')
     return data
 
 
 def get_data_forex(from_symbol, to_symbol, period='D'):
     if period == 'd': period = 'D'
     sfn = (from_symbol+to_symbol) + '_' + period
-    data = pkl.load(open(datadir + '/' + sfn + '.pkl', 'rb'))
+    data = pd.read_json(datadir + '/' + sfn + '.json')
     return data
 
 
 def get_data_forex_proc(from_symbol, to_symbol, period='D'):
     if period == 'd': period = 'D'
     sfn = (from_symbol+to_symbol) + '_' + period
-    data = pkl.load(open(datadir + '/' + sfn + '_proc.pkl', 'rb'))
+    data = pd.read_json(datadir + '/' + sfn + '_proc.json')
     return data
 
 
