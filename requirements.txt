@@ -1,0 +1,9 @@
+numpy
+pandas
+pandas_ta
+tsfel
+empyrical
+gym
+tqdm
+scikit-learn
+matplotlib
