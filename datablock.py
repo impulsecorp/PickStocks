@@ -194,6 +194,10 @@ def procdata(ddd,
 
         # Additional custom features
 
+        # Convert the index to datetime and create a temporary date variable
+        dix = pd.to_datetime(data.index)
+        dates = dix.date
+        
         # Calculate the "overnight move" indicator
         overnight_move = []
         last_open = None
@@ -213,9 +217,6 @@ def procdata(ddd,
         data['X'+uchar+'move'] = b
 
         # times in row
-        # Convert the index to datetime and create a temporary date variable
-        dix = pd.to_datetime(data.index)
-        dates = dix.date
 
         # Calculate the "X times in row" indicator
         x_in_row = []
