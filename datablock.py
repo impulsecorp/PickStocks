@@ -203,12 +203,10 @@ def procdata(ddd,
         last_open = None
         overnight = 0
         for i, (xopen_, date) in enumerate(zip(open_.values, dates)):
-            print((xopen_, date))
             if (i > 0) and (date != dates[i-1]):
                 overnight = xopen_ - last_open
             overnight_move.append(overnight)
             last_open = xopen_ 
-        print(overnight_move)
         # Add the "overnight move" column to the DataFrame
         data['X'+uchar+'overnight_move'] = overnight_move
 
