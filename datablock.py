@@ -264,5 +264,13 @@ def procdata(ddd,
 
     # cut off the first N rows, because they are likely nans
     if cut_first_N > 0: data = data[cut_first_N:]
-        
+
+    data = data.between_time('09:30', '16:00')
+    data = data.rename({'X__Open': 'Open',
+                        'X__High': 'High',
+                        'X__Low': 'Low',
+                        'X__Close': 'Close',
+                        'X__Volume': 'Volume',
+                        }, axis=1)
+
     return data
