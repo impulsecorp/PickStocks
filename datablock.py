@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import tsfel as ts
-from tqdm import tqdm_notebook as tqdm
+from tqdm.notebook import tqdm
 import pandas_ta as ta
 from system import make_dataset, get_data, shuffle_split, make_synth_data
 
