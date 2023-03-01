@@ -193,9 +193,20 @@ def procdata(ddd,
         data['X'+uchar+'hour'] = data.index.hour
 
         # Additional custom features
-        b = open_.values[1:] - close.values[0:-1]
-        b = np.hstack([np.zeros(1), b])
-        data['X'+uchar+'overnight_move'] = b
+
+        # Calculate the "overnight move" indicator
+        overnight_move = []
+        last_open = None
+        for i, (xopen_, date) in enumerate(zip(data['open'], dates)):
+            if date != dates[i-1] and last_open is not None:
+                overnight = xopen_ - last_open
+                overnight_move.append(overnight)
+            else:
+                overnight_move.append(0)
+            if last_open is None:
+                last_open = xopen_
+            last_open = xopen_
+        data['X'+uchar+'overnight_move'] = overnight_move
 
         b = open_.values[1:] - open_.values[0:-1]
         b = np.hstack([np.zeros(1), b])
@@ -230,7 +241,6 @@ def procdata(ddd,
             b = open_.values[n:] - open_.values[0:-n]
             b = np.hstack([np.zeros(n), b])
             return b
-
         data['X'+uchar+'pmove_2'] = mlag(2)
         data['X'+uchar+'pmove_3'] = mlag(3)
         data['X'+uchar+'pmove_5'] = mlag(5)
