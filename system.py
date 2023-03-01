@@ -72,25 +72,25 @@ except:
 def get_data(symbol, period='D', nrows=None):
     if period == 'd': period = 'D'
     sfn = symbol + '_' + period
-    data = pd.read_json(datadir + '/' + sfn + '.json', nrows=nrows, lines=True)
+    data = pd.read_csv(datadir + '/' + sfn + '.csv', nrows=nrows, parse_dates=['time'], index_col=0)
     return data
 
 def get_data_proc(symbol, period='D', nrows=None):
     if period == 'd': period = 'D'
     sfn = symbol + '_' + period
-    data = pd.read_json(datadir + '/' + sfn + '_proc.json', nrows=nrows, lines=True)
+    data = pd.read_csv(datadir + '/' + sfn + '_proc.csv', nrows=nrows, parse_dates=['time'], index_col=0)
     return data
 
-def get_data_forex(from_symbol, to_symbol, period='D', nrows=None):
+def get_data_forex(from_symbol, to_symbol, period='D', nrows=None, parse_dates=['time'], index_col=0):
     if period == 'd': period = 'D'
     sfn = (from_symbol+to_symbol) + '_' + period
-    data = pd.read_json(datadir + '/' + sfn + '.json', nrows=nrows, lines=True)
+    data = pd.read_csv(datadir + '/' + sfn + '.csv', nrows=nrows, parse_dates=['time'], index_col=0)
     return data
 
-def get_data_forex_proc(from_symbol, to_symbol, period='D', nrows=None):
+def get_data_forex_proc(from_symbol, to_symbol, period='D', nrows=None, parse_dates=['time'], index_col=0):
     if period == 'd': period = 'D'
     sfn = (from_symbol+to_symbol) + '_' + period
-    data = pd.read_json(datadir + '/' + sfn + '_proc.json', nrows=nrows, lines=True)
+    data = pd.read_csv(datadir + '/' + sfn + '_proc.csv', nrows=nrows, parse_dates=['time'], index_col=0)
     return data
 
 def get_data_pair(symbol1, symbol2, period='D'):
