@@ -10,6 +10,10 @@ from matplotlib.pyplot import plot
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
 from tqdm.notebook import tqdm
+from backtesting import Backtest, Strategy
+import time
+import datetime
+from backtesting.lib import plot_heatmaps
 
 def seed_everything(seed=0):
     rnd.seed(seed)
@@ -19,6 +23,137 @@ seed = 0
 while seed == 0:
     seed = int(time.time() * 100000) % 1000000
 seed_everything(seed)
+
+
+class BaseMLStrategy(Strategy):
+
+    clf_class = None
+    test_size = None
+    period = None
+
+    def init(self):
+        self.data_timeperiod_time = datetime.timedelta(minutes=int(self.period.replace('min', '')))
+
+        # Init the ensemble of classifier
+        self.clf = self.clf_class()
+
+        # Train the classifier in advance on the first N_TRAIN examples
+        self.N_TRAIN = int(self.data.df.shape[0] * (1.0 - self.test_size))
+        df = self.data.df.iloc[:self.N_TRAIN]
+        X, y = get_clean_Xy(df)
+        self.clf.fit(X, y)
+
+        # Plot y for inspection
+        self.I(get_y, self.data.df, name='ground truth')
+
+        # Prepare empty, all-NaN prediction indicator
+        self.predictions = self.I(lambda: np.repeat(np.nan, len(self.data)), name='predictions')
+
+    def outofbounds(self):
+        # Skip the training, in-sample data
+        if len(self.data) < self.N_TRAIN:
+            return True 
+        # Proceed only with out-of-sample data. Prepare some variables
+        # Don't allow trading in aftermarket hours
+        current_time = self.data.index[-1].time()
+        current_date = self.data.index[-1].date()
+        cd = datetime.datetime.combine(current_date, current_time)
+        stcd = datetime.datetime.combine(current_date, datetime.time(9,30))
+        encd = datetime.datetime.combine(current_date, datetime.time(16,0))
+        if not (((cd >= (stcd - self.data_timeperiod_time)) and (cd < (encd - self.data_timeperiod_time)))):
+            self.position.close()
+            return True 
+        return False 
+
+
+    def next(self):
+        if not self.outofbounds():
+            # Forecast the next movement
+            X = get_X(self.data.df.iloc[-1:])
+            prediction = self.clf.predict(X)[0]
+
+            # Open position
+            if prediction >= 0.5:
+                self.buy(size=.2)
+            elif prediction < 0.5:
+                self.sell(size=.2)
+
+
+class BaseMLSingleParamEqStrategy(BaseMLStrategy):
+
+    feature_name = None 
+    feature_target = None 
+    take_abs = False
+
+    def next(self):
+        if not self.outofbounds():
+            # Forecast the next movement
+            X = get_X(self.data.df.iloc[-1:])
+            v = self.data.df[self.feature_name].iloc[-1:].values[0]
+            if self.take_abs: 
+                v = abs(v)
+            if v == self.feature_target:
+                prediction = self.clf.predict(X)[0]
+
+                # Open position
+                if prediction >= 0.5:
+                    self.buy(size=.2)
+                elif prediction < 0.5:
+                    self.sell(size=.2)
+            else:
+                self.position.close()
+
+
+
+class BaseMLSingleParamAboveStrategy(BaseMLStrategy):
+    feature_name = None 
+    feature_target = None 
+    take_abs = False
+
+    def next(self):
+        if not self.outofbounds():
+            # Forecast the next movement
+            X = get_X(self.data.df.iloc[-1:])
+            v = self.data.df[self.feature_name].iloc[-1:].values[0]
+            if self.take_abs: 
+                v = abs(v)
+            if v > self.feature_target:
+                prediction = self.clf.predict(X)[0]
+
+                # Open position
+                if prediction >= 0.5:
+                    self.buy(size=.2)
+                elif prediction < 0.5:
+                    self.sell(size=.2)
+            else:
+                self.position.close()
+
+
+
+class BaseMLSingleParamBelowStrategy(BaseMLStrategy):
+
+    feature_name = None 
+    feature_target = None 
+    take_abs = False
+
+    def next(self):
+        if not self.outofbounds():
+            # Forecast the next movement
+            X = get_X(self.data.df.iloc[-1:])
+            v = self.data.df[self.feature_name].iloc[-1:].values[0]
+            if self.take_abs: 
+                v = abs(v)
+            if v < self.feature_target:
+                prediction = self.clf.predict(X)[0]
+
+                # Open position
+                if prediction >= 0.5:
+                    self.buy(size=.2)
+                elif prediction < 0.5:
+                    self.sell(size=.2)
+            else:
+                self.position.close()
+
 
 def fix_data(data1, data2):
     data1 = data1[::-1]

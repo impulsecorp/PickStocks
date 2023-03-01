@@ -1,4 +1,5 @@
 numpy
+scipy
 pandas
 pandas_ta
 tsfel
@@ -8,3 +9,4 @@ tqdm
 scikit-learn
 matplotlib
 backtesting
+scikit-optimize
