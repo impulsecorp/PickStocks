@@ -202,17 +202,19 @@ def procdata(ddd,
         data['X'+uchar+'move'] = b
 
         # times in row
-        trb = []
-        c = 0
-        pa = 0
-        for a in b:
-            if (a > 0) == pa:
-                c += 1
+        # Calculate the "X times in row" indicator
+        x_in_row = []
+        count = 0
+        last_move = 0
+        for move in data['X'+uchar+'move']:
+            if move * last_move > 0 and move != 0:
+                count += 1
             else:
-                c = 0
-            trb += [c]
-            pa = (a > 0)
-        data['X'+uchar+'times_in_row'] = trb
+                count = 0
+            x_in_row.append(count)
+            last_move = move
+        # Add the "X times in row" column to the DataFrame
+        data['X'+uchar+'times_in_row'] = x_in_row
 
         def mlag(n=1):
             b = open_.values[n:] - open_.values[0:-n]
