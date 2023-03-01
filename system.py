@@ -72,38 +72,26 @@ except:
 def get_data(symbol, period='D', nrows=None):
     if period == 'd': period = 'D'
     sfn = symbol + '_' + period
-    data = pd.read_json(datadir + '/' + sfn + '.json')
-    if nrows is not None:
-        return data
-    else:
-        return data.iloc[0:nrows]
+    data = pd.read_json(datadir + '/' + sfn + '.json', nrows=nrows, lines=True)
+    return data
 
 def get_data_proc(symbol, period='D', nrows=None):
     if period == 'd': period = 'D'
     sfn = symbol + '_' + period
-    data = pd.read_json(datadir + '/' + sfn + '_proc.json')
-    if nrows is not None:
-        return data
-    else:
-        return data.iloc[0:nrows]
+    data = pd.read_json(datadir + '/' + sfn + '_proc.json', nrows=nrows, lines=True)
+    return data
 
 def get_data_forex(from_symbol, to_symbol, period='D', nrows=None):
     if period == 'd': period = 'D'
     sfn = (from_symbol+to_symbol) + '_' + period
-    data = pd.read_json(datadir + '/' + sfn + '.json')
-    if nrows is not None:
-        return data
-    else:
-        return data.iloc[0:nrows]
+    data = pd.read_json(datadir + '/' + sfn + '.json', nrows=nrows, lines=True)
+    return data
 
 def get_data_forex_proc(from_symbol, to_symbol, period='D', nrows=None):
     if period == 'd': period = 'D'
     sfn = (from_symbol+to_symbol) + '_' + period
-    data = pd.read_json(datadir + '/' + sfn + '_proc.json')
-    if nrows is not None:
-        return data
-    else:
-        return data.iloc[0:nrows]
+    data = pd.read_json(datadir + '/' + sfn + '_proc.json', nrows=nrows, lines=True)
+    return data
 
 def get_data_pair(symbol1, symbol2, period='D'):
     s1, s1_f = get_data(symbol1, period=period)
