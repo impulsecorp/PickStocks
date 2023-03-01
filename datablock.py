@@ -201,7 +201,7 @@ def procdata(ddd,
         # Calculate the "overnight move" indicator
         overnight_move = []
         last_open = None
-        for i, (xopen_, date) in enumerate(zip(data['open'].values, dates)):
+        for i, (xopen_, date) in enumerate(zip(open_.values, dates)):
             if i == 0 or date != dates[i-1] and last_open is not None:
                 overnight = xopen_ - last_open
                 overnight_move.append(overnight)
