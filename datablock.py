@@ -202,16 +202,26 @@ def procdata(ddd,
         data['X'+uchar+'move'] = b
 
         # times in row
+        # Convert the index to datetime and create a temporary date variable
+        dix = pd.to_datetime(data.index)
+        dates = dix.date
+
         # Calculate the "X times in row" indicator
         x_in_row = []
         count = 0
         last_move = 0
-        for move in data['X'+uchar+'move']:
+        last_date = None
+        for i, move in enumerate(data['X'+uchar+'move']):
+            date = dates[i]
+            if date != last_date:
+                count = 0
             if move * last_move > 0 and move != 0:
                 count += 1
             else:
                 count = 0
             x_in_row.append(count)
+            last_move = move
+            last_date = date
             last_move = move
         # Add the "X times in row" column to the DataFrame
         data['X'+uchar+'times_in_row'] = x_in_row
