@@ -246,39 +246,33 @@ def procdata(ddd,
         data['X'+uchar+'pmove_10'] = mlag(10)
         data['X'+uchar+'pmove_20'] = mlag(20)
 
-        # Was the overnight move in the same direction as yesterday's open-to-close move?
-        b = open_.values[1:] - close.values[0:-1]
-        b = np.hstack([np.zeros(1), b])
+        # Compute the overnight move direction
+        data['X'+uchar+'overnight_direction'] = np.where(data['X'+uchar+'overnight_move'] > 0, 1, -1)
 
-        c = open_.values[0:-1] - close.values[0:-1]
-        c = np.hstack([np.zeros(1), c])
-        data['X'+uchar+'f1'] = np.sign(b) == np.sign(c)
+        # Compute yesterday's close-to-open move
+        yesterday_close = close.shift(1)
+        yesterday_open = open_.shift(1)
+        data['X'+uchar+'yesterday_move'] = yesterday_open - yesterday_close
 
-        # Is today's open above yesterday's high?
-        b = open_.values[1:] > high.values[0:-1]
-        b = np.hstack([np.zeros(1), b])
-        data['X'+uchar+'f2'] = b
+        # Indicator 1: Overnight move in the same direction as yesterday's close-to-open move
+        data['X'+uchar+'f1'] = np.where(data['X'+uchar+'overnight_direction'].values == np.sign(data['X'+uchar+'yesterday_move'].values), 1, 0)
 
-        # Is today's open below yesterday's low?
-        b = open_.values[1:] < low.values[0:-1]
-        b = np.hstack([np.zeros(1), b])
-        data['X'+uchar+'f3'] = b
+        # Indicator 2: Today's open is above yesterday's high
+        data['X'+uchar+'f2'] = np.where(open_ > high.shift(1), 1, 0)
 
-        # Is today's open above yesterday's open but below yesterday's high?
-        b = (open_.values[1:] > open_.values[0:-1]) & (open_.values[1:] < high.values[0:-1])
-        b = np.hstack([np.zeros(1), b])
-        data['X'+uchar+'f4'] = b
+        # Indicator 3: Today's open is below yesterday's low
+        data['X'+uchar+'f3'] = np.where(open_ < low.shift(1), 1, 0)
 
-        # Is today's open below yesterday's close, but above yesterday's low?
-        b = (open_.values[1:] < close.values[0:-1]) & (open_.values[1:] > low.values[0:-1])
-        b = np.hstack([np.zeros(1), b])
-        data['X'+uchar+'f5'] = b
+        # Indicator 4: Today's open is above yesterday's open but below yesterday's high
+        data['X'+uchar+'f4'] = np.where((open_ > yesterday_open) & (open_ < high.shift(1)), 1, 0)
 
-        # Is today's open between yesterday's open and close?
-        b = ((open_.values[1:] > close.values[0:-1]) & (open_.values[1:] < open_.values[0:-1])) | (
-                    (open_.values[1:] < close.values[0:-1]) & (open_.values[1:] > open_.values[0:-1]))
-        b = np.hstack([np.zeros(1), b])
-        data['X'+uchar+'f6'] = b
+        # Indicator 5: Today's open is below yesterday's close, but above yesterday's low
+        data['X'+uchar+'f5'] = np.where((open_ < yesterday_close) & (open_ > low.shift(1)), 1, 0)
+
+        # Indicator 6: Today's open is between yesterday's open and close
+        data['X'+uchar+'f6'] = np.where((open_ > np.minimum(yesterday_open, yesterday_close)) & 
+                            (open_ < np.maximum(yesterday_open, yesterday_close)), 1, 0)
+
 
     data.replace([np.inf, -np.inf], np.nan, inplace=True)
     data = data.fillna(0).astype(float)
