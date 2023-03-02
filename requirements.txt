@@ -10,3 +10,4 @@ scikit-learn
 matplotlib
 backtesting
 scikit-optimize
+bokeh
