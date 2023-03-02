@@ -1,25 +1,24 @@
+import datetime
 import os
-import pickle as pkl
 import random as rnd
 import time
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from backtesting import Strategy
 from matplotlib.pyplot import plot
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
 from tqdm.notebook import tqdm
-from backtesting import Backtest, Strategy
-import time
-import datetime
-from backtesting.lib import plot_heatmaps
 
 
 def seed_everything(seed=0):
     rnd.seed(seed)
     np.random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
+
+
 seed = 0
 while seed == 0:
     seed = int(time.time() * 100000) % 1000000
@@ -30,13 +29,16 @@ pd.set_option('display.max_columns', None)
 # global parameter
 test_size = 0.2
 
+
 def featformat(s):
     return 'X__' + '_'.join(s.lower().split(' '))
+
+
 def featdeformat(s):
-    return s[len('X__'):].replace('_',' ').replace('-',' ')
+    return s[len('X__'):].replace('_', ' ').replace('-', ' ')
+
 
 class BaseMLStrategy(Strategy):
-
     clf_class = None
     period = None
 
@@ -61,19 +63,18 @@ class BaseMLStrategy(Strategy):
     def outofbounds(self):
         # Skip the training, in-sample data
         if len(self.data) < self.N_TRAIN:
-            return True 
-        # Proceed only with out-of-sample data. Prepare some variables
+            return True
+            # Proceed only with out-of-sample data. Prepare some variables
         # Don't allow trading in aftermarket hours
         current_time = self.data.index[-1].time()
         current_date = self.data.index[-1].date()
         cd = datetime.datetime.combine(current_date, current_time)
-        stcd = datetime.datetime.combine(current_date, datetime.time(9,30))
-        encd = datetime.datetime.combine(current_date, datetime.time(16,0))
+        stcd = datetime.datetime.combine(current_date, datetime.time(9, 30))
+        encd = datetime.datetime.combine(current_date, datetime.time(16, 0))
         if not (((cd >= (stcd - self.data_timeperiod_time)) and (cd < (encd - self.data_timeperiod_time)))):
             self.position.close()
-            return True 
-        return False 
-
+            return True
+        return False
 
     def next(self):
         if not self.outofbounds():
@@ -89,9 +90,8 @@ class BaseMLStrategy(Strategy):
 
 
 class BaseMLSingleParamEqStrategy(BaseMLStrategy):
-
-    feature_name = None 
-    target = None 
+    feature_name = None
+    target = None
 
     # True means it will trade only when abs(move) > threshold, False means it will trade only when move > threshold
     take_abs = False
@@ -101,7 +101,7 @@ class BaseMLSingleParamEqStrategy(BaseMLStrategy):
             # Forecast the next movement
             X = get_X(self.data.df.iloc[-1:])
             v = self.data.df[self.feature_name].iloc[-1:].values[0]
-            if self.take_abs: 
+            if self.take_abs:
                 v = abs(v)
             if v == self.target:
                 prediction = self.clf.predict(X)[0]
@@ -115,10 +115,9 @@ class BaseMLSingleParamEqStrategy(BaseMLStrategy):
                 self.position.close()
 
 
-
 class BaseMLSingleParamAboveStrategy(BaseMLStrategy):
-    feature_name = None 
-    threshold = None 
+    feature_name = None
+    threshold = None
     take_abs = False
 
     def next(self):
@@ -126,7 +125,7 @@ class BaseMLSingleParamAboveStrategy(BaseMLStrategy):
             # Forecast the next movement
             X = get_X(self.data.df.iloc[-1:])
             v = self.data.df[self.feature_name].iloc[-1:].values[0]
-            if self.take_abs: 
+            if self.take_abs:
                 v = abs(v)
             if v > self.threshold:
                 prediction = self.clf.predict(X)[0]
@@ -140,11 +139,9 @@ class BaseMLSingleParamAboveStrategy(BaseMLStrategy):
                 self.position.close()
 
 
-
 class BaseMLSingleParamBelowStrategy(BaseMLStrategy):
-
-    feature_name = None 
-    threshold = None 
+    feature_name = None
+    threshold = None
     take_abs = False
 
     def next(self):
@@ -152,7 +149,7 @@ class BaseMLSingleParamBelowStrategy(BaseMLStrategy):
             # Forecast the next movement
             X = get_X(self.data.df.iloc[-1:])
             v = self.data.df[self.feature_name].iloc[-1:].values[0]
-            if self.take_abs: 
+            if self.take_abs:
                 v = abs(v)
             if v < self.threshold:
                 prediction = self.clf.predict(X)[0]
@@ -221,23 +218,27 @@ def get_data(symbol, period='D', nrows=None):
     data = pd.read_csv(datadir + '/' + sfn + '.csv', nrows=nrows, parse_dates=['time'], index_col=0)
     return data
 
+
 def get_data_proc(symbol, period='D', nrows=None):
     if period == 'd': period = 'D'
     sfn = symbol + '_' + period
     data = pd.read_csv(datadir + '/' + sfn + '_proc.csv', nrows=nrows, parse_dates=['time'], index_col=0)
     return data
 
+
 def get_data_forex(from_symbol, to_symbol, period='D', nrows=None, parse_dates=['time'], index_col=0):
     if period == 'd': period = 'D'
-    sfn = (from_symbol+to_symbol) + '_' + period
+    sfn = (from_symbol + to_symbol) + '_' + period
     data = pd.read_csv(datadir + '/' + sfn + '.csv', nrows=nrows, parse_dates=['time'], index_col=0)
     return data
 
+
 def get_data_forex_proc(from_symbol, to_symbol, period='D', nrows=None, parse_dates=['time'], index_col=0):
     if period == 'd': period = 'D'
-    sfn = (from_symbol+to_symbol) + '_' + period
+    sfn = (from_symbol + to_symbol) + '_' + period
     data = pd.read_csv(datadir + '/' + sfn + '_proc.csv', nrows=nrows, parse_dates=['time'], index_col=0)
     return data
+
 
 def get_data_pair(symbol1, symbol2, period='D'):
     s1, s1_f = get_data(symbol1, period=period)
@@ -247,6 +248,7 @@ def get_data_pair(symbol1, symbol2, period='D'):
     s1_f, s2_f = fix_data(s1_f, s2_f)
 
     return (s1 / s2).dropna(), (s1_f / s2_f).dropna()
+
 
 def get_data_features(data):
     return list(data.columns[0:5]) + [featdeformat(x) for x in data.columns[5:]]
@@ -262,7 +264,7 @@ def read_tradestation_data(filename, test_size=0.2, max_rows=None, nosplit=0):
                    d[' <Low>'].values,
                    d[' <Close>'].values,
                    d[' <Volume>'].values, ]).T
- # type: ignore
+    # type: ignore
     data = pd.DataFrame(data=v, columns=['1. open', '2. high', '3. low', '4. close', '5. volume', ], index=idx)
 
     if max_rows is not None:
@@ -383,7 +385,7 @@ def get_X(data):
 
 def get_y(data):
     """ Return dependent variable y """
-    y = data.Open.pct_change(1) 
+    y = data.Open.pct_change(1)
     y[y >= 0] = 1
     y[y < 0] = 0
     return y
@@ -400,8 +402,8 @@ def get_clean_Xy(df):
 
 
 def do_RL_backtest(env, clfs, scaling=0, scalers=None,
-                envs=None, callback=None,
-                do_plot=1, keras=0, proba=0, force_action=None, remove_outliers=0, outlier_bounds=None):
+                   envs=None, callback=None,
+                   do_plot=1, keras=0, proba=0, force_action=None, remove_outliers=0, outlier_bounds=None):
     binary = env.binary
     observation = env.reset()
     if envs is not None: _ = [x.reset() for x in envs]
