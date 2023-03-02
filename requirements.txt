@@ -6,7 +6,7 @@ tsfel
 empyrical
 gym
 tqdm
-scikit-learn==1.2.1
+scikit-learn
 matplotlib
 backtesting
 scikit-optimize
