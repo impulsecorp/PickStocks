@@ -63,11 +63,11 @@ def get_optdata(results, consts):
 
 
 def plot_result(bt, results):
-    if 1:
+    try:
         bt.plot(plot_width=1200, plot_volume=False, plot_pl=1, resample=False);
-    # except Exception as ex:
-    #     print(str(ex))
-    #     plot(np.cumsum(results[0]['_trades']['PnL'].values));
+    except Exception as ex:
+        print(str(ex))
+        plot(np.cumsum(results[0]['_trades']['PnL'].values));
 
 
 def plot_optresult(rdata, feature_name):
@@ -90,8 +90,8 @@ def plot_optresult(rdata, feature_name):
         ax.plot(xs, rdata)
         ax.set_xticks(xs)
         ax.set_xticklabels([x.strftime('%H:%M') for x in ixs], rotation=45)
-        ax.set_xlabel('Time')
-        ax.set_ylabel(feature_name)
+        ax.set_xlabel(feature_name)
+        ax.set_ylabel('objective')
 
 
 def featformat(s):
@@ -120,9 +120,7 @@ class MLClassifierStrategy(Strategy):
         self.predictions = self.I(lambda: np.repeat(np.nan, len(self.data)), name='predictions')
         self.N_TRAIN = int(self.data.df.shape[0] * train_set_end)
         self.N_OPTRAIN = int(self.data.df.shape[0] * val_test_end)
-        if (self.mode == 'test') and (val_test_end < 1.0):
-            # during testing, the previous optimization data is also included to the training set
-            self.N_TRAIN = self.N_OPTRAIN
+
 
     def init(self):
         # Make indicators and other variables
@@ -130,20 +128,27 @@ class MLClassifierStrategy(Strategy):
         # Init the ensemble of classifier
         self.clf = self.clf_class()
         # Train the classifier in advance on the first N_TRAIN examples
-        df = self.data.df.iloc[:self.N_TRAIN]
+        if (self.mode == 'opt'):
+            df = self.data.df.iloc[0:self.N_TRAIN]
+        elif (self.mode == 'test'):
+            df = self.data.df.iloc[0:self.N_OPTRAIN]
+        elif (self.mode == 'none'):
+            df = self.data.df.iloc[0:self.N_TRAIN]
+        else:
+            df = self.data.df.iloc[0:self.N_TRAIN]
         X, y = get_clean_Xy(df)
         self.clf.fit(X, y)
 
     def outofbounds(self):
         # Skip the training data
-        if len(self.data) < self.N_TRAIN:
+        if (self.mode == 'none') and (len(self.data) < self.N_TRAIN):
             return True
-        # Skip the future test data
-        if (self.mode == 'opt') and (len(self.data) > self.N_OPTRAIN):
+        if (self.mode == 'opt') and not (self.N_TRAIN < len(self.data) < self.N_OPTRAIN):
             return True
-        if (self.mode == 'test') and (len(self.data) < self.N_OPTRAIN):
+        if (self.mode == 'test') and not (len(self.data) > self.N_OPTRAIN):
             return True
-        # Proceed only with validation data. Prepare some variables
+
+        # Proceed with right data. Prepare some variables
         # Don't allow trading in aftermarket hours
         current_time = self.data.index[-1].time()
         current_date = self.data.index[-1].date()
