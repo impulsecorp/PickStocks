@@ -15,6 +15,7 @@ import time
 import datetime
 from backtesting.lib import plot_heatmaps
 
+
 def seed_everything(seed=0):
     rnd.seed(seed)
     np.random.seed(seed)
@@ -23,12 +24,20 @@ seed = 0
 while seed == 0:
     seed = int(time.time() * 100000) % 1000000
 seed_everything(seed)
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_columns', None)
 
+# global parameter
+test_size = 0.2
+
+def featformat(s):
+    return 'X__' + '_'.join(s.lower().split(' '))
+def featdeformat(s):
+    return s[len('X__'):].replace('_',' ').replace('-',' ')
 
 class BaseMLStrategy(Strategy):
 
     clf_class = None
-    test_size = None
     period = None
 
     def init(self):
@@ -38,7 +47,7 @@ class BaseMLStrategy(Strategy):
         self.clf = self.clf_class()
 
         # Train the classifier in advance on the first N_TRAIN examples
-        self.N_TRAIN = int(self.data.df.shape[0] * (1.0 - self.test_size))
+        self.N_TRAIN = int(self.data.df.shape[0] * (1.0 - test_size))
         df = self.data.df.iloc[:self.N_TRAIN]
         X, y = get_clean_Xy(df)
         self.clf.fit(X, y)
@@ -82,7 +91,9 @@ class BaseMLStrategy(Strategy):
 class BaseMLSingleParamEqStrategy(BaseMLStrategy):
 
     feature_name = None 
-    feature_target = None 
+    target = None 
+
+    # True means it will trade only when abs(move) > threshold, False means it will trade only when move > threshold
     take_abs = False
 
     def next(self):
@@ -92,7 +103,7 @@ class BaseMLSingleParamEqStrategy(BaseMLStrategy):
             v = self.data.df[self.feature_name].iloc[-1:].values[0]
             if self.take_abs: 
                 v = abs(v)
-            if v == self.feature_target:
+            if v == self.target:
                 prediction = self.clf.predict(X)[0]
 
                 # Open position
@@ -107,7 +118,7 @@ class BaseMLSingleParamEqStrategy(BaseMLStrategy):
 
 class BaseMLSingleParamAboveStrategy(BaseMLStrategy):
     feature_name = None 
-    feature_target = None 
+    threshold = None 
     take_abs = False
 
     def next(self):
@@ -117,7 +128,7 @@ class BaseMLSingleParamAboveStrategy(BaseMLStrategy):
             v = self.data.df[self.feature_name].iloc[-1:].values[0]
             if self.take_abs: 
                 v = abs(v)
-            if v > self.feature_target:
+            if v > self.threshold:
                 prediction = self.clf.predict(X)[0]
 
                 # Open position
@@ -133,7 +144,7 @@ class BaseMLSingleParamAboveStrategy(BaseMLStrategy):
 class BaseMLSingleParamBelowStrategy(BaseMLStrategy):
 
     feature_name = None 
-    feature_target = None 
+    threshold = None 
     take_abs = False
 
     def next(self):
@@ -143,7 +154,7 @@ class BaseMLSingleParamBelowStrategy(BaseMLStrategy):
             v = self.data.df[self.feature_name].iloc[-1:].values[0]
             if self.take_abs: 
                 v = abs(v)
-            if v < self.feature_target:
+            if v < self.threshold:
                 prediction = self.clf.predict(X)[0]
 
                 # Open position
@@ -236,6 +247,9 @@ def get_data_pair(symbol1, symbol2, period='D'):
     s1_f, s2_f = fix_data(s1_f, s2_f)
 
     return (s1 / s2).dropna(), (s1_f / s2_f).dropna()
+
+def get_data_features(data):
+    return list(data.columns[0:5]) + [featdeformat(x) for x in data.columns[5:]]
 
 
 def read_tradestation_data(filename, test_size=0.2, max_rows=None, nosplit=0):
