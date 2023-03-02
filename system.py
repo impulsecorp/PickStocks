@@ -20,6 +20,7 @@ from matplotlib.pyplot import gca
 from matplotlib.pyplot import plot
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
+from sklearn.linear_model import LogisticRegression
 from tqdm.notebook import tqdm
 
 def reseed():
@@ -148,7 +149,10 @@ class MLClassifierStrategy(Strategy):
         # Make indicators and other variables
         self.make_inds()
         # Init the ensemble of classifier
-        self.clf = self.clf_class()
+        try:
+            self.clf = self.clf_class()
+        except:
+            self.clf = LogisticRegression()
         # Train the classifier in advance on the first N_TRAIN examples
         if (self.mode == 'opt'):
             df = self.data.df.iloc[0:self.N_TRAIN]
@@ -159,7 +163,12 @@ class MLClassifierStrategy(Strategy):
         else:
             df = self.data.df.iloc[0:self.N_TRAIN]
         X, y = get_clean_Xy(df)
-        self.clf.fit(X, y)
+        try:
+            self.clf.fit(X, y)
+        except:
+            self.clf = LogisticRegression()
+            self.clf.fit(X, y)
+
 
     def outofbounds(self):
         # Skip the training data
@@ -215,16 +224,23 @@ class MLEnsembleStrategy(MLClassifierStrategy):
         self.make_inds()
 
         # Init the ensemble of classifiers
-        self.clfs = [self.clf_class() for _ in range(self.num_clfs)]
+        try:
+            self.clfs = [self.clf_class() for _ in range(self.num_clfs)]
+        except: 
+            self.clfs = [LogisticRegression() for _ in range(self.num_clfs)]
 
         # Train the classifiers in advance on the first N_TRAIN examples
         df = self.data.df.iloc[:self.N_TRAIN]
         X, y = get_clean_Xy(df)
-        for clf in self.clfs:
+        for i,clf in enumerate(self.clfs):
             pn = rnd.sample(list(range(len(X))), int(self.dropout * len(X)))
             Xt = X.copy()[pn]
             yt = y.copy()[pn]
-            clf.fit(Xt, yt)
+            try:
+                clf.fit(Xt, yt)
+            except:
+                self.clfs[i] = LogisticRegression()
+                self.clfs[i].fit(Xt, yt)
 
     def get_prediction(self):
         # Forecast the next movement
