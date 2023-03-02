@@ -1,6 +1,6 @@
 numpy
 scipy
-pandas
+pandas==1.5.2
 pandas_ta
 tsfel
 empyrical
