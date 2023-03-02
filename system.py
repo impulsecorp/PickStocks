@@ -1,5 +1,6 @@
 import datetime
 import os
+os.environ['BOKEH_DEV'] = 'true'
 import random as rnd
 import time
 
@@ -13,7 +14,6 @@ from matplotlib.pyplot import plot
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
 from tqdm.notebook import tqdm
-
 
 def seed_everything(seed=0):
     rnd.seed(seed)
@@ -58,10 +58,11 @@ def get_optdata(results, consts):
 
 
 def plot_result(bt, results):
-    try:
+    if 1:
         bt.plot(plot_width=1200, plot_volume=False, plot_pl=1);
-    except:
-        plot(np.cumsum(results[0]['_trades']['PnL'].values));
+    # except Exception as ex:
+    #     print(str(ex))
+    #     plot(np.cumsum(results[0]['_trades']['PnL'].values));
 
 
 def plot_optresult(rdata, feature_name):
