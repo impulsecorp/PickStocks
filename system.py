@@ -343,18 +343,36 @@ class MLEnsembleParamOverUnderStrategy(MLEnsembleParamStrategy):
 
 
 class MLSingleMultiParamStrategy(MLClassifierStrategy):
-    feature_names = []
-    take_abs = []
+    feature_names = None
+    take_abs = None
+
 
 def getmv(self):
+    # get all feature names
+    fnames = sorted([x for x in dir(self) if (x[0:3]=='X__')])
     vs = []
-    for i, feature_name in enumerate(self.feature_names):
-        v = self.data.df[feature_name].iloc[-1:].values[0]
-        if self.take_abs[i]: v = abs(v)
+    for i, feature_name in enumerate(fnames):
+        v = self.data.df[feature_name.replace('_target_134','')].iloc[-1:].values[0]
+        # if self.take_abs[i]: v = abs(v)
         vs.append(v)
     return vs
 
 MLSingleMultiParamStrategy.getmv = getmv
+
+class MLSingleMultiParamEqStrategy(MLSingleMultiParamStrategy):
+    def next(self):
+        targets = sorted([x for x in dir(self) if (x[0:3] == 'X__')])
+
+        if not self.outofbounds():
+            vs = self.getmv()
+            if any([(x == getattr(self, y)) for x,y in zip(vs, targets)]):
+                self.act(self.get_prediction())
+            else:
+                self.position.close()
+        else:
+            self.position.close()
+
+
 
 
 #####################
