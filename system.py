@@ -30,10 +30,11 @@ pd.set_option('display.max_columns', None)
 
 from datetime import datetime, timedelta, time
 
-# global parameter
-train_set_end = 0.5
-max_tries = 1.0
-val_test_end = 1.0
+# global parameters
+
+train_set_end = 0.5 # percentage point specifying the training set size
+val_test_end = 1.0 # percentage point specifying the validation set size (1.0 means no validation set)
+max_tries = 1.0 # for optimization, percentage of the grid space to cover (1.0 = exchaustive search)
 
 
 # the objective function to maximize during optimization
