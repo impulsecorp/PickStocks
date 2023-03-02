@@ -37,18 +37,18 @@ from datetime import datetime, timedelta, time
 
 # global parameters
 
-train_set_end = 0.5 # percentage point specifying the training set size
-val_test_end = 1.0 # percentage point specifying the validation set size (1.0 means no validation set)
+train_set_end = 0.4 # percentage point specifying the training set size
+val_test_end = 0.7 # percentage point specifying the validation set size (1.0 means no validation set)
 max_tries = 1.0 # for optimization, percentage of the grid space to cover (1.0 = exchaustive search)
 
 
 # the objective function to maximize during optimization
 def objective(s):
     return (0.05 * s['SQN'] +
-            0.05 * s['Profit Factor'] +
-            0.1 * s['Win Rate [%]'] / 100.0 +
+            0.0 * s['Profit Factor'] +
+            0.5 * s['Win Rate [%]'] / 100.0 +
             0.35 * s['Exposure Time [%]'] / 100.0 +
-            1.5 * s['Return [%]']
+            1.0 * s['Return [%]']
             )
 
 
@@ -142,10 +142,13 @@ class MLClassifierStrategy(Strategy):
     def outofbounds(self):
         # Skip the training data
         if (self.mode in ['none', 'opt']) and (len(self.data) < self.N_TRAIN):
+            self.position.close()
             return True
         if (self.mode == 'opt') and (len(self.data) > self.N_OPTRAIN):
+            self.position.close()
             return True
         if (self.mode == 'test') and not (len(self.data) > self.N_OPTRAIN):
+            self.position.close()
             return True
 
         # Proceed with right data. Prepare some variables
@@ -156,7 +159,9 @@ class MLClassifierStrategy(Strategy):
         stcd = datetime.combine(current_date, time(9, 30))
         encd = datetime.combine(current_date, time(16, 0))
         if not ((cd >= (stcd - self.data_timeperiod_time)) and (cd < (encd - self.data_timeperiod_time))):
+            self.position.close()
             return True
+
         return False
 
     def get_prediction(self):
