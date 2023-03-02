@@ -11,3 +11,4 @@ matplotlib
 backtesting
 scikit-optimize
 bokeh
+panel
