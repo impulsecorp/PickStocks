@@ -12,7 +12,7 @@ from matplotlib.pyplot import plot
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
 from tqdm.notebook import tqdm
-from datetime import datetime, timedelta, time as dtime
+from matplotlib.dates import date2num
 
 def seed_everything(seed=0):
     rnd.seed(seed)
@@ -27,6 +27,7 @@ seed_everything(seed)
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
 
+from datetime import datetime, timedelta, time
 
 
 
@@ -55,26 +56,26 @@ def get_optdata(results, consts):
 
 def plot_optresult(rdata, feature_name):
     xs = rdata.index.values
-    try:
-        gca().set_xticks(np.linspace(np.min(xs), np.max(xs), 10))
+    if not isinstance(xs[0], time):
         plt.plot(xs, rdata.values)
         gca().set_xlabel(feature_name)
         gca().set_ylabel('objective')
-    except:
-        plt.plot([x.strftime('%H:%M') for x in xs], rdata.values)
-
+        gca().set_xticks(np.linspace(np.min(xs), np.max(xs), 10))
+    else:
         # convert xs to a list of datetime.datetime objects with a fixed date
         fixed_date = datetime(2022, 1, 1)  # or any other date you prefer
+        ixs = xs[:]
         xs = [datetime.combine(fixed_date, x) for x in xs]
+        # convert xs to a list of floats using date2num
+        xs = date2num(xs)
 
         # plot the data
-        fig, ax = plt.subplots()
+        ax = gca()
         ax.plot(xs, rdata)
         ax.set_xticks(xs)
-        ax.set_xticklabels([x.strftime('%H:%M') for x in xs], rotation=45)
+        ax.set_xticklabels([x.strftime('%H:%M') for x in ixs], rotation=45)
         ax.set_xlabel('Time')
         ax.set_ylabel(feature_name)
-        plt.show()
 
 
 def featformat(s):
@@ -124,8 +125,8 @@ class MLClassifierStrategy(Strategy):
         current_time = self.data.index[-1].time()
         current_date = self.data.index[-1].date()
         cd = datetime.combine(current_date, current_time)
-        stcd = datetime.combine(current_date, dtime(9, 30))
-        encd = datetime.combine(current_date, dtime(16, 0))
+        stcd = datetime.combine(current_date, time(9, 30))
+        encd = datetime.combine(current_date, time(16, 0))
         if not ((cd >= (stcd - self.data_timeperiod_time)) and (cd < (encd - self.data_timeperiod_time))):
             return True
         return False
