@@ -143,7 +143,7 @@ class MLClassifierStrategy(Strategy):
         # Skip the training data
         if (self.mode == 'none') and (len(self.data) < self.N_TRAIN):
             return True
-        if (self.mode == 'opt') and not (self.N_TRAIN < len(self.data) < self.N_OPTRAIN):
+        if (self.mode == 'opt') and (len(self.data) > self.N_OPTRAIN):
             return True
         if (self.mode == 'test') and not (len(self.data) > self.N_OPTRAIN):
             return True
