@@ -1,6 +1,11 @@
 import datetime
 import os
-os.environ['BOKEH_DEV'] = 'true'
+os.environ['BOKEH_RESOURCES'] = 'inline'
+import bokeh.util.warnings
+import warnings
+warnings.filterwarnings('ignore')
+warnings.filterwarnings('ignore', category=bokeh.util.warnings.BokehDeprecationWarning, module='bokeh')
+warnings.filterwarnings('ignore', category=bokeh.util.warnings.BokehUserWarning, module='bokeh')
 import random as rnd
 import time
 
@@ -59,7 +64,7 @@ def get_optdata(results, consts):
 
 def plot_result(bt, results):
     if 1:
-        bt.plot(plot_width=1200, plot_volume=False, plot_pl=1);
+        bt.plot(plot_width=1200, plot_volume=False, plot_pl=1, resample=False);
     # except Exception as ex:
     #     print(str(ex))
     #     plot(np.cumsum(results[0]['_trades']['PnL'].values));
