@@ -1,13 +1,15 @@
 import datetime
 import os
+
 os.environ['BOKEH_RESOURCES'] = 'inline'
 import bokeh.util.warnings
 import warnings
+
 warnings.filterwarnings('ignore')
 warnings.filterwarnings('ignore', category=bokeh.util.warnings.BokehDeprecationWarning, module='bokeh')
 warnings.filterwarnings('ignore', category=bokeh.util.warnings.BokehUserWarning, module='bokeh')
 import random as rnd
-import time
+import time as stime
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,16 +22,19 @@ from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
 from tqdm.notebook import tqdm
 
-def seed_everything(seed=0):
-    rnd.seed(seed)
-    np.random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
+def reseed():
+    def seed_everything(s=0):
+        rnd.seed(s)
+        np.random.seed(s)
+        os.environ['PYTHONHASHSEED'] = str(s)
 
+    seed = 0
+    while seed == 0:
+        seed = int(stime.time() * 100000) % 1000000
+    seed_everything(seed)
+    return seed
+seed = reseed()
 
-seed = 0
-while seed == 0:
-    seed = int(time.time() * 100000) % 1000000
-seed_everything(seed)
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
 
@@ -37,17 +42,20 @@ from datetime import datetime, timedelta, time
 
 # global parameters
 
-train_set_end = 0.4 # percentage point specifying the training set size
-val_test_end = 0.7 # percentage point specifying the validation set size (1.0 means no validation set)
-max_tries = 1.0 # for optimization, percentage of the grid space to cover (1.0 = exchaustive search)
+train_set_end = 0.4  # percentage point specifying the training set end point (1.0 means all data is training set)
+val_set_end = 0.7  # percentage point specifying the validation set end point (1.0 means no test set and all data after the previous point is validation )
+# basically this is the data with the values above, which are like sliders determining the layout
+# [|0.0| ......... train .......... |0.4| ............ val ............ |0.7| .............. test ............... |1.0|]
+
+max_tries = 1.0  # for optimization, percentage of the grid space to cover (1.0 = exchaustive search)
 
 
 # the objective function to maximize during optimization
 def objective(s):
     return (0.05 * s['SQN'] +
             0.0 * s['Profit Factor'] +
-            0.5 * s['Win Rate [%]'] / 100.0 +
-            0.35 * s['Exposure Time [%]'] / 100.0 +
+            0.25 * s['Win Rate [%]'] / 100.0 +
+            0.2 * s['Exposure Time [%]'] / 100.0 +
             1.0 * s['Return [%]']
             )
 
@@ -72,11 +80,21 @@ def plot_result(bt, results):
 
 def plot_optresult(rdata, feature_name):
     xs = rdata.index.values
+    goodidx = np.where(~np.isnan(rdata.values))[0]
+    xs = xs[goodidx]
+    rda = rdata.values[goodidx]
+
     if not isinstance(xs[0], time):
-        plt.plot(xs, rdata.values)
+        plt.plot(xs, rda)
         gca().set_xlabel(feature_name)
         gca().set_ylabel('objective')
-        gca().set_xticks(np.linspace(np.min(xs), np.max(xs), 10))
+        if xs.dtype.kind == 'f':
+            try:
+                gca().set_xticks(np.linspace(np.min(xs), np.max(xs), 10), rotation=45)
+            except:
+                gca().set_xticks(np.linspace(np.min(xs), np.max(xs), 10))
+        else:
+            gca().set_xticks(np.linspace(np.min(xs), np.max(xs), 10))
     else:
         # convert xs to a list of datetime.datetime objects with a fixed date
         fixed_date = datetime(2022, 1, 1)  # or any other date you prefer
@@ -87,7 +105,7 @@ def plot_optresult(rdata, feature_name):
 
         # plot the data
         ax = gca()
-        ax.plot(xs, rdata)
+        ax.plot(xs, rda)
         ax.set_xticks(xs)
         ax.set_xticklabels([x.strftime('%H:%M') for x in ixs], rotation=45)
         ax.set_xlabel(feature_name)
@@ -110,7 +128,7 @@ class MLClassifierStrategy(Strategy):
     clf_class = None
     period = None
     min_confidence = 0.0
-    mode = 'none' # 'opt', 'test'
+    mode = 'none'  # 'opt', 'test'
 
     def make_inds(self):
         self.data_timeperiod_time = timedelta(minutes=int(self.period.replace('min', '')))
@@ -119,8 +137,7 @@ class MLClassifierStrategy(Strategy):
         # Prepare empty, all-NaN prediction indicator
         self.predictions = self.I(lambda: np.repeat(np.nan, len(self.data)), name='predictions')
         self.N_TRAIN = int(self.data.df.shape[0] * train_set_end)
-        self.N_OPTRAIN = int(self.data.df.shape[0] * val_test_end)
-
+        self.N_OPTRAIN = int(self.data.df.shape[0] * val_set_end)
 
     def init(self):
         # Make indicators and other variables
@@ -323,6 +340,21 @@ class MLEnsembleParamOverUnderStrategy(MLEnsembleParamStrategy):
                 self.position.close()
         else:
             self.position.close()
+
+
+class MLSingleMultiParamStrategy(MLClassifierStrategy):
+    feature_names = []
+    take_abs = []
+
+def getmv(self):
+    vs = []
+    for i, feature_name in enumerate(self.feature_names):
+        v = self.data.df[feature_name].iloc[-1:].values[0]
+        if self.take_abs[i]: v = abs(v)
+        vs.append(v)
+    return vs
+
+MLSingleMultiParamStrategy.getmv = getmv
 
 
 #####################
