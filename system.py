@@ -7,12 +7,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from backtesting import Strategy
+from matplotlib.dates import date2num
 from matplotlib.pyplot import gca
 from matplotlib.pyplot import plot
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
 from tqdm.notebook import tqdm
-from matplotlib.dates import date2num
+
 
 def seed_everything(seed=0):
     rnd.seed(seed)
@@ -29,11 +30,11 @@ pd.set_option('display.max_columns', None)
 
 from datetime import datetime, timedelta, time
 
-
-
 # global parameter
-test_size = 0.2
+train_set_end = 0.5
 max_tries = 1.0
+val_test_end = 1.0
+
 
 # the objective function to maximize during optimization
 def objective(s):
@@ -44,14 +45,22 @@ def objective(s):
             1.5 * s['Return [%]']
             )
 
+
 # keyword parameters nearly always the same
 btkw = dict(commission=.000, margin=1.0, trade_on_close=False, exclusive_orders=True)
-optkw = dict(method = 'grid', max_tries = max_tries, maximize = objective, return_heatmap = True)
+optkw = dict(method='grid', max_tries=max_tries, maximize=objective, return_heatmap=True)
 
 
 def get_optdata(results, consts):
     return results[1][tuple([consts[y][0] for y in [x for x in consts.keys()]
                              if consts[y][0] in [x[0] for x in results[1].index.levels]])]
+
+
+def plot_result(bt, results):
+    try:
+        bt.plot(plot_width=1200, plot_volume=False, plot_pl=1);
+    except:
+        plot(np.cumsum(results[0]['_trades']['PnL'].values));
 
 
 def plot_optresult(rdata, feature_name):
@@ -86,7 +95,6 @@ def featdeformat(s):
     return s[len('X__'):].replace('_', ' ').replace('-', ' ')
 
 
-
 #####################
 # STRATEGIES
 #####################
@@ -95,6 +103,7 @@ class MLClassifierStrategy(Strategy):
     clf_class = None
     period = None
     min_confidence = 0.0
+    optimizing = False
 
     def make_inds(self):
         self.data_timeperiod_time = timedelta(minutes=int(self.period.replace('min', '')))
@@ -102,25 +111,27 @@ class MLClassifierStrategy(Strategy):
         self.I(get_y, self.data.df, name='ground truth')
         # Prepare empty, all-NaN prediction indicator
         self.predictions = self.I(lambda: np.repeat(np.nan, len(self.data)), name='predictions')
-        self.N_TRAIN = int(self.data.df.shape[0] * (1.0 - test_size))
+        self.N_TRAIN = int(self.data.df.shape[0] * train_set_end)
+        self.N_OPTRAIN = int(self.data.df.shape[0] * val_test_end)
 
     def init(self):
         # Make indicators and other variables
         self.make_inds()
-
         # Init the ensemble of classifier
         self.clf = self.clf_class()
-
         # Train the classifier in advance on the first N_TRAIN examples
         df = self.data.df.iloc[:self.N_TRAIN]
         X, y = get_clean_Xy(df)
         self.clf.fit(X, y)
 
     def outofbounds(self):
-        # Skip the training, in-sample data
+        # Skip the training data
         if len(self.data) < self.N_TRAIN:
             return True
-        # Proceed only with out-of-sample data. Prepare some variables
+        # Skip the future test data
+        if self.optimizing and (len(self.data) > self.N_OPTRAIN):
+            return True
+        # Proceed only with validation data. Prepare some variables
         # Don't allow trading in aftermarket hours
         current_time = self.data.index[-1].time()
         current_date = self.data.index[-1].date()
@@ -243,6 +254,8 @@ class MLSingleParamOverUnderStrategy(MLSingleParamStrategy):
                 self.act(self.get_prediction())
             else:
                 self.position.close()
+        else:
+            self.position.close()
 
 
 class MLEnsembleParamEqStrategy(MLEnsembleParamStrategy):
@@ -255,6 +268,8 @@ class MLEnsembleParamEqStrategy(MLEnsembleParamStrategy):
                 self.act(self.get_prediction())
             else:
                 self.position.close()
+        else:
+            self.position.close()
 
 
 class MLEnsembleParamTimeEqStrategy(MLEnsembleParamStrategy):
@@ -267,6 +282,9 @@ class MLEnsembleParamTimeEqStrategy(MLEnsembleParamStrategy):
                 self.act(self.get_prediction())
             else:
                 self.position.close()
+        else:
+            self.position.close()
+
 
 class MLEnsembleParamOverUnderStrategy(MLEnsembleParamStrategy):
     threshold = None
@@ -281,6 +299,8 @@ class MLEnsembleParamOverUnderStrategy(MLEnsembleParamStrategy):
                 self.act(self.get_prediction())
             else:
                 self.position.close()
+        else:
+            self.position.close()
 
 
 #####################
@@ -337,30 +357,20 @@ except:
 
 
 def get_data(symbol, period='D', nrows=None):
+    print('Loading..', end=' ')
     if period == 'd': period = 'D'
     sfn = symbol + '_' + period
     data = pd.read_csv(datadir + '/' + sfn + '.csv', nrows=nrows, parse_dates=['time'], index_col=0)
+    print('Done.')
     return data
 
 
 def get_data_proc(symbol, period='D', nrows=None):
+    print('Loading..', end=' ')
     if period == 'd': period = 'D'
     sfn = symbol + '_' + period
     data = pd.read_csv(datadir + '/' + sfn + '_proc.csv', nrows=nrows, parse_dates=['time'], index_col=0)
-    return data
-
-
-def get_data_forex(from_symbol, to_symbol, period='D', nrows=None, parse_dates=['time'], index_col=0):
-    if period == 'd': period = 'D'
-    sfn = (from_symbol + to_symbol) + '_' + period
-    data = pd.read_csv(datadir + '/' + sfn + '.csv', nrows=nrows, parse_dates=['time'], index_col=0)
-    return data
-
-
-def get_data_forex_proc(from_symbol, to_symbol, period='D', nrows=None, parse_dates=['time'], index_col=0):
-    if period == 'd': period = 'D'
-    sfn = (from_symbol + to_symbol) + '_' + period
-    data = pd.read_csv(datadir + '/' + sfn + '_proc.csv', nrows=nrows, parse_dates=['time'], index_col=0)
+    print('Done.')
     return data
 
 

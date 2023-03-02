@@ -16,6 +16,8 @@ def procdata(ddd,
     global data, dindex
     data = ddd
     dindex = ddd.index
+
+    print('Computing features..', end=' ')
     
     uchar = '__' if double_underscore else '_'
 
@@ -287,7 +289,7 @@ def procdata(ddd,
                         'X__Close': 'Close',
                         'X__Volume': 'Volume',
                         }, axis=1)
-
+    print('Done.')
     return data
 
 
@@ -302,6 +304,8 @@ def procdata_lite(ddd,
     global data, dindex
     data = ddd
     dindex = ddd.index
+
+    print('Computing features..', end=' ')
     
     uchar = '__' if double_underscore else '_'
 
@@ -457,5 +461,5 @@ def procdata_lite(ddd,
                         'X__Close': 'Close',
                         'X__Volume': 'Volume',
                         }, axis=1)
-
+    print('Done.')
     return data
