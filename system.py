@@ -110,7 +110,7 @@ class MLClassifierStrategy(Strategy):
     clf_class = None
     period = None
     min_confidence = 0.0
-    optimizing = False
+    mode = 'none' # 'opt', 'test'
 
     def make_inds(self):
         self.data_timeperiod_time = timedelta(minutes=int(self.period.replace('min', '')))
@@ -120,6 +120,9 @@ class MLClassifierStrategy(Strategy):
         self.predictions = self.I(lambda: np.repeat(np.nan, len(self.data)), name='predictions')
         self.N_TRAIN = int(self.data.df.shape[0] * train_set_end)
         self.N_OPTRAIN = int(self.data.df.shape[0] * val_test_end)
+        if (self.mode == 'test') and (val_test_end < 1.0):
+            # during testing, the previous optimization data is also included to the training set
+            self.N_TRAIN = self.N_OPTRAIN
 
     def init(self):
         # Make indicators and other variables
@@ -136,7 +139,9 @@ class MLClassifierStrategy(Strategy):
         if len(self.data) < self.N_TRAIN:
             return True
         # Skip the future test data
-        if self.optimizing and (len(self.data) > self.N_OPTRAIN):
+        if (self.mode == 'opt') and (len(self.data) > self.N_OPTRAIN):
+            return True
+        if (self.mode == 'test') and (len(self.data) < self.N_OPTRAIN):
             return True
         # Proceed only with validation data. Prepare some variables
         # Don't allow trading in aftermarket hours
