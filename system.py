@@ -54,130 +54,178 @@ def featdeformat(s):
     return s[len('X__'):].replace('_', ' ').replace('-', ' ')
 
 
-class BaseMLStrategy(Strategy):
+#####################
+# STRATEGIES
+#####################
+
+class MLClassifierStrategy(Strategy):
     clf_class = None
     period = None
+    min_confidence = 0.0
+
+    def make_inds(self):
+        self.data_timeperiod_time = datetime.timedelta(minutes=int(self.period.replace('min', '')))
+        # Plot y for inspection
+        self.I(get_y, self.data.df, name='ground truth')
+        # Prepare empty, all-NaN prediction indicator
+        self.predictions = self.I(lambda: np.repeat(np.nan, len(self.data)), name='predictions')
+        self.N_TRAIN = int(self.data.df.shape[0] * (1.0 - test_size))
 
     def init(self):
-        self.data_timeperiod_time = datetime.timedelta(minutes=int(self.period.replace('min', '')))
+        # Make indicators and other variables
+        self.make_inds()
 
         # Init the ensemble of classifier
         self.clf = self.clf_class()
 
         # Train the classifier in advance on the first N_TRAIN examples
-        self.N_TRAIN = int(self.data.df.shape[0] * (1.0 - test_size))
         df = self.data.df.iloc[:self.N_TRAIN]
         X, y = get_clean_Xy(df)
         self.clf.fit(X, y)
-
-        # Plot y for inspection
-        self.I(get_y, self.data.df, name='ground truth')
-
-        # Prepare empty, all-NaN prediction indicator
-        self.predictions = self.I(lambda: np.repeat(np.nan, len(self.data)), name='predictions')
 
     def outofbounds(self):
         # Skip the training, in-sample data
         if len(self.data) < self.N_TRAIN:
             return True
-            # Proceed only with out-of-sample data. Prepare some variables
+        # Proceed only with out-of-sample data. Prepare some variables
         # Don't allow trading in aftermarket hours
         current_time = self.data.index[-1].time()
         current_date = self.data.index[-1].date()
         cd = datetime.datetime.combine(current_date, current_time)
         stcd = datetime.datetime.combine(current_date, datetime.time(9, 30))
         encd = datetime.datetime.combine(current_date, datetime.time(16, 0))
-        if not (((cd >= (stcd - self.data_timeperiod_time)) and (cd < (encd - self.data_timeperiod_time)))):
-            self.position.close()
+        if not ((cd >= (stcd - self.data_timeperiod_time)) and (cd < (encd - self.data_timeperiod_time))):
             return True
         return False
 
-    def next(self):
-        if not self.outofbounds():
-            # Forecast the next movement
-            X = get_X(self.data.df.iloc[-1:])
-            prediction = self.clf.predict(X)[0]
+    def get_prediction(self):
+        # Forecast the next movement
+        return self.clf.predict(get_X(self.data.df.iloc[-1:]))[0]
 
+    def act(self, prediction):
+        self.predictions[-1] = prediction
+        confidence = abs(0.5 - prediction) * 2
+        if confidence > self.min_confidence:
             # Open position
             if prediction >= 0.5:
                 self.buy(size=.2)
             elif prediction < 0.5:
                 self.sell(size=.2)
 
+    def next(self):
+        if not self.outofbounds():
+            self.act(self.get_prediction())
+        else:
+            self.position.close()
 
-class BaseMLSingleParamEqStrategy(BaseMLStrategy):
+
+class MLEnsembleStrategy(MLClassifierStrategy):
+    num_clfs = 100
+    dropout = 0.05
+
+    def init(self):
+        self.make_inds()
+
+        # Init the ensemble of classifiers
+        self.clfs = [self.clf_class() for _ in range(self.num_clfs)]
+
+        # Train the classifiers in advance on the first N_TRAIN examples
+        df = self.data.df.iloc[:self.N_TRAIN]
+        X, y = get_clean_Xy(df)
+        for clf in self.clfs:
+            pn = rnd.sample(list(range(len(X))), int(self.dropout * len(X)))
+            Xt = X.copy()[pn]
+            yt = y.copy()[pn]
+            clf.fit(Xt, yt)
+
+    def get_prediction(self):
+        # Forecast the next movement
+        X = get_X(self.data.df.iloc[-1:])
+        return np.mean([clf.predict(X)[0] for clf in self.clfs])
+
+
+class MLSingleParamStrategy(MLClassifierStrategy):
     feature_name = None
+    # True means it will trade only when abs(move) > threshold
+    # False means it will trade only when move > threshold
+    take_abs = False
+
+
+class MLEnsembleParamStrategy(MLEnsembleStrategy):
+    feature_name = None
+    # True means it will trade only when abs(move) > threshold
+    # False means it will trade only when move > threshold
+    take_abs = False
+
+
+# useful for the parametric strategies
+def getv(self):
+    v = self.data.df[self.feature_name].iloc[-1:].values[0]
+    if self.take_abs: v = abs(v)
+    return v
+
+
+MLSingleParamStrategy.getv = getv
+MLEnsembleParamStrategy.getv = getv
+
+
+class MLSingleParamEqStrategy(MLSingleParamStrategy):
     target = None
 
-    # True means it will trade only when abs(move) > threshold, False means it will trade only when move > threshold
-    take_abs = False
-
     def next(self):
         if not self.outofbounds():
-            # Forecast the next movement
-            X = get_X(self.data.df.iloc[-1:])
-            v = self.data.df[self.feature_name].iloc[-1:].values[0]
-            if self.take_abs:
-                v = abs(v)
+            v = self.getv()
             if v == self.target:
-                prediction = self.clf.predict(X)[0]
-
-                # Open position
-                if prediction >= 0.5:
-                    self.buy(size=.2)
-                elif prediction < 0.5:
-                    self.sell(size=.2)
+                self.act(self.get_prediction())
             else:
                 self.position.close()
 
 
-class BaseMLSingleParamAboveStrategy(BaseMLStrategy):
-    feature_name = None
+class MLSingleParamOverUnderStrategy(MLSingleParamStrategy):
     threshold = None
-    take_abs = False
+    direction = 'above'  # or below
 
     def next(self):
         if not self.outofbounds():
-            # Forecast the next movement
-            X = get_X(self.data.df.iloc[-1:])
-            v = self.data.df[self.feature_name].iloc[-1:].values[0]
-            if self.take_abs:
-                v = abs(v)
-            if v > self.threshold:
-                prediction = self.clf.predict(X)[0]
-
-                # Open position
-                if prediction >= 0.5:
-                    self.buy(size=.2)
-                elif prediction < 0.5:
-                    self.sell(size=.2)
+            v = self.getv()
+            if ((self.direction == 'above') or (self.direction == 1)) and (v > self.threshold):
+                self.act(self.get_prediction())
+            elif ((self.direction == 'below') or (self.direction == -1)) and (v < self.threshold):
+                self.act(self.get_prediction())
             else:
                 self.position.close()
 
 
-class BaseMLSingleParamBelowStrategy(BaseMLStrategy):
-    feature_name = None
-    threshold = None
-    take_abs = False
+class MLEnsembleParamEqStrategy(MLEnsembleParamStrategy):
+    target = None
 
     def next(self):
         if not self.outofbounds():
-            # Forecast the next movement
-            X = get_X(self.data.df.iloc[-1:])
-            v = self.data.df[self.feature_name].iloc[-1:].values[0]
-            if self.take_abs:
-                v = abs(v)
-            if v < self.threshold:
-                prediction = self.clf.predict(X)[0]
-
-                # Open position
-                if prediction >= 0.5:
-                    self.buy(size=.2)
-                elif prediction < 0.5:
-                    self.sell(size=.2)
+            v = self.getv()
+            if v == self.target:
+                self.act(self.get_prediction())
             else:
                 self.position.close()
 
+
+class MLEnsembleParamOverUnderStrategy(MLEnsembleParamStrategy):
+    threshold = None
+    direction = 'above'  # or below
+
+    def next(self):
+        if not self.outofbounds():
+            v = self.getv()
+            if ((self.direction == 'above') or (self.direction == 1)) and (v > self.threshold):
+                self.act(self.get_prediction())
+            elif ((self.direction == 'below') or (self.direction == -1)) and (v < self.threshold):
+                self.act(self.get_prediction())
+            else:
+                self.position.close()
+
+
+#####################
+# DATA PROCEDURES
+#####################
 
 def fix_data(data1, data2):
     data1 = data1[::-1]
