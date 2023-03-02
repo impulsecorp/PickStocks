@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from backtesting import Strategy
+from matplotlib.pyplot import gca
 from matplotlib.pyplot import plot
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
@@ -28,6 +29,21 @@ pd.set_option('display.max_columns', None)
 
 # global parameter
 test_size = 0.2
+
+btkw = dict(commission=.000, margin=1.0, trade_on_close=False, exclusive_orders=True)
+
+
+def get_optdata(results, consts):
+    return results[1][tuple([consts[y][0] for y in [x for x in consts.keys()]
+                             if consts[y][0] in [x[0] for x in results[1].index.levels]])]
+
+
+def plot_optresult(rdata, feature_name):
+    xs = rdata.index.values
+    plt.plot(xs, rdata.values)
+    gca().set_xlabel(feature_name)
+    gca().set_ylabel('objective')
+    gca().set_xticks(np.linspace(np.min(xs), np.max(xs), 10))
 
 
 def featformat(s):
