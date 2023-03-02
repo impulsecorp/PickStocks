@@ -29,8 +29,20 @@ pd.set_option('display.max_columns', None)
 
 # global parameter
 test_size = 0.2
+max_tries = 1.0
 
+# the objective function to maximize during optimization
+def objective(s):
+    return (0.05 * s['SQN'] +
+            0.05 * s['Profit Factor'] +
+            0.1 * s['Win Rate [%]'] / 100.0 +
+            0.35 * s['Exposure Time [%]'] / 100.0 +
+            1.5 * s['Return [%]']
+            )
+
+# keyword parameters nearly always the same
 btkw = dict(commission=.000, margin=1.0, trade_on_close=False, exclusive_orders=True)
+optkw = dict(method = 'grid', max_tries = max_tries, maximize = objective, return_heatmap = True)
 
 
 def get_optdata(results, consts):
@@ -52,6 +64,7 @@ def featformat(s):
 
 def featdeformat(s):
     return s[len('X__'):].replace('_', ' ').replace('-', ' ')
+
 
 
 #####################
@@ -179,6 +192,8 @@ class MLSingleParamEqStrategy(MLSingleParamStrategy):
                 self.act(self.get_prediction())
             else:
                 self.position.close()
+        else:
+            self.position.close()
 
 
 class MLSingleParamOverUnderStrategy(MLSingleParamStrategy):
