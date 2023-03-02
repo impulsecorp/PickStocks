@@ -12,7 +12,7 @@ from matplotlib.pyplot import plot
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
 from tqdm.notebook import tqdm
-
+from datetime import datetime, timedelta, time as dtime
 
 def seed_everything(seed=0):
     rnd.seed(seed)
@@ -26,6 +26,9 @@ while seed == 0:
 seed_everything(seed)
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
+
+
+
 
 # global parameter
 test_size = 0.2
@@ -52,10 +55,26 @@ def get_optdata(results, consts):
 
 def plot_optresult(rdata, feature_name):
     xs = rdata.index.values
-    plt.plot(xs, rdata.values)
-    gca().set_xlabel(feature_name)
-    gca().set_ylabel('objective')
-    gca().set_xticks(np.linspace(np.min(xs), np.max(xs), 10))
+    try:
+        gca().set_xticks(np.linspace(np.min(xs), np.max(xs), 10))
+        plt.plot(xs, rdata.values)
+        gca().set_xlabel(feature_name)
+        gca().set_ylabel('objective')
+    except:
+        plt.plot([x.strftime('%H:%M') for x in xs], rdata.values)
+
+        # convert xs to a list of datetime.datetime objects with a fixed date
+        fixed_date = datetime(2022, 1, 1)  # or any other date you prefer
+        xs = [datetime.combine(fixed_date, x) for x in xs]
+
+        # plot the data
+        fig, ax = plt.subplots()
+        ax.plot(xs, rdata)
+        ax.set_xticks(xs)
+        ax.set_xticklabels([x.strftime('%H:%M') for x in xs], rotation=45)
+        ax.set_xlabel('Time')
+        ax.set_ylabel(feature_name)
+        plt.show()
 
 
 def featformat(s):
@@ -77,7 +96,7 @@ class MLClassifierStrategy(Strategy):
     min_confidence = 0.0
 
     def make_inds(self):
-        self.data_timeperiod_time = datetime.timedelta(minutes=int(self.period.replace('min', '')))
+        self.data_timeperiod_time = timedelta(minutes=int(self.period.replace('min', '')))
         # Plot y for inspection
         self.I(get_y, self.data.df, name='ground truth')
         # Prepare empty, all-NaN prediction indicator
@@ -104,9 +123,9 @@ class MLClassifierStrategy(Strategy):
         # Don't allow trading in aftermarket hours
         current_time = self.data.index[-1].time()
         current_date = self.data.index[-1].date()
-        cd = datetime.datetime.combine(current_date, current_time)
-        stcd = datetime.datetime.combine(current_date, datetime.time(9, 30))
-        encd = datetime.datetime.combine(current_date, datetime.time(16, 0))
+        cd = datetime.combine(current_date, current_time)
+        stcd = datetime.combine(current_date, dtime(9, 30))
+        encd = datetime.combine(current_date, dtime(16, 0))
         if not ((cd >= (stcd - self.data_timeperiod_time)) and (cd < (encd - self.data_timeperiod_time))):
             return True
         return False
@@ -196,6 +215,20 @@ class MLSingleParamEqStrategy(MLSingleParamStrategy):
             self.position.close()
 
 
+class MLSingleParamTimeEqStrategy(MLSingleParamStrategy):
+    target = None
+
+    def next(self):
+        if not self.outofbounds():
+            v = self.data.index[-1].time()
+            if v == self.target:
+                self.act(self.get_prediction())
+            else:
+                self.position.close()
+        else:
+            self.position.close()
+
+
 class MLSingleParamOverUnderStrategy(MLSingleParamStrategy):
     threshold = None
     direction = 'above'  # or below
@@ -222,6 +255,17 @@ class MLEnsembleParamEqStrategy(MLEnsembleParamStrategy):
             else:
                 self.position.close()
 
+
+class MLEnsembleParamTimeEqStrategy(MLEnsembleParamStrategy):
+    target = None
+
+    def next(self):
+        if not self.outofbounds():
+            v = self.data.index[-1].time()
+            if v == self.target:
+                self.act(self.get_prediction())
+            else:
+                self.position.close()
 
 class MLEnsembleParamOverUnderStrategy(MLEnsembleParamStrategy):
     threshold = None
