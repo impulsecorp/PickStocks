@@ -79,37 +79,40 @@ def plot_result(bt, results):
 
 
 def plot_optresult(rdata, feature_name):
-    xs = rdata.index.values
-    goodidx = np.where(~np.isnan(rdata.values))[0]
-    xs = xs[goodidx]
-    rda = rdata.values[goodidx]
+    if len(rdata.index.values.shape[1]) > 1:
+        rdata.plot(kind='line', use_index=False);
+    else:
+        xs = rdata.index.values
+        goodidx = np.where(~np.isnan(rdata.values))[0]
+        xs = xs[goodidx]
+        rda = rdata.values[goodidx]
 
-    if not isinstance(xs[0], time):
-        plt.plot(xs, rda)
-        gca().set_xlabel(feature_name)
-        gca().set_ylabel('objective')
-        if xs.dtype.kind == 'f':
-            try:
-                gca().set_xticks(np.linspace(np.min(xs), np.max(xs), 10), rotation=45)
-            except:
+        if not isinstance(xs[0], time):
+            plt.plot(xs, rda)
+            gca().set_xlabel(feature_name)
+            gca().set_ylabel('objective')
+            if xs.dtype.kind == 'f':
+                try:
+                    gca().set_xticks(np.linspace(np.min(xs), np.max(xs), 10), rotation=45)
+                except:
+                    gca().set_xticks(np.linspace(np.min(xs), np.max(xs), 10))
+            else:
                 gca().set_xticks(np.linspace(np.min(xs), np.max(xs), 10))
         else:
-            gca().set_xticks(np.linspace(np.min(xs), np.max(xs), 10))
-    else:
-        # convert xs to a list of datetime.datetime objects with a fixed date
-        fixed_date = datetime(2022, 1, 1)  # or any other date you prefer
-        ixs = xs[:]
-        xs = [datetime.combine(fixed_date, x) for x in xs]
-        # convert xs to a list of floats using date2num
-        xs = date2num(xs)
+            # convert xs to a list of datetime.datetime objects with a fixed date
+            fixed_date = datetime(2022, 1, 1)  # or any other date you prefer
+            ixs = xs[:]
+            xs = [datetime.combine(fixed_date, x) for x in xs]
+            # convert xs to a list of floats using date2num
+            xs = date2num(xs)
 
-        # plot the data
-        ax = gca()
-        ax.plot(xs, rda)
-        ax.set_xticks(xs)
-        ax.set_xticklabels([x.strftime('%H:%M') for x in ixs], rotation=45)
-        ax.set_xlabel(feature_name)
-        ax.set_ylabel('objective')
+            # plot the data
+            ax = gca()
+            ax.plot(xs, rda)
+            ax.set_xticks(xs)
+            ax.set_xticklabels([x.strftime('%H:%M') for x in ixs], rotation=45)
+            ax.set_xlabel(feature_name)
+            ax.set_ylabel('objective')
 
 
 def featformat(s):
