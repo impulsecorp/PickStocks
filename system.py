@@ -79,8 +79,10 @@ def plot_result(bt, results):
 
 
 def plot_optresult(rdata, feature_name):
-    if len(rdata.index.values.shape[1]) > 1:
+    if rdata.index.to_numpy().shape[0] > 2:
         rdata.plot(kind='line', use_index=False);
+        gca().set_xlabel(feature_name)
+        gca().set_ylabel('objective')
     else:
         xs = rdata.index.values
         goodidx = np.where(~np.isnan(rdata.values))[0]
