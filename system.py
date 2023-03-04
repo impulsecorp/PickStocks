@@ -48,7 +48,7 @@ val_set_end = 0.7  # percentage point specifying the validation set end point (1
 # basically this is the data with the values above, which are like sliders determining the layout
 # [|0.0| ......... train .......... |0.4| ............ val ............ |0.7| .............. test ............... |1.0|]
 
-max_tries = 1.0  # for optimization, percentage of the grid space to cover (1.0 = exchaustive search)
+max_tries = 0.2  # for optimization, percentage of the grid space to cover (1.0 = exchaustive search)
 
 
 # the objective function to maximize during optimization
