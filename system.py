@@ -150,12 +150,9 @@ class MLClassifierStrategy(Strategy):
         self.make_inds()
         # Init the ensemble of classifier
         try:
-            try:
-                self.clf = self.clf_class(random_state=reseed())
-            except:
-                self.clf = self.clf_class()
+            self.clf = self.clf_class(random_state=reseed())
         except:
-            self.clf = LogisticRegression(random_state=reseed())
+            self.clf = self.clf_class()
         # Train the classifier in advance on the first N_TRAIN examples
         if (self.mode == 'opt'):
             df = self.data.df.iloc[0:self.N_TRAIN]
