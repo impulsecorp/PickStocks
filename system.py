@@ -172,9 +172,9 @@ class MLClassifierStrategy(Strategy):
 
     def outofbounds(self):
         # Skip the training data
-        if (self.mode in ['none', 'opt']) and (len(self.data) < self.N_TRAIN):
-            self.position.close()
-            return True
+        # if (self.mode in ['none', 'opt']):# and (len(self.data) < self.N_TRAIN):
+        #     self.position.close()
+        #     return True
         if (self.mode == 'opt') and (len(self.data) > self.N_OPTRAIN):
             self.position.close()
             return True
