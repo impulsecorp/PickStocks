@@ -126,6 +126,36 @@ def featdeformat(s):
     return s[len('X__'):].replace('_', ' ').replace('-', ' ')
 
 
+def filter_trades_by_feature(trades, data, feature, min_value=None, max_value=None, exact_value=None, use_abs=False):
+    # Create a copy of the trades DataFrame
+    filtered_trades = trades.copy()
+
+    # Get the relevant portion of the predictions indicator that corresponds to the trades
+    relevant_predictions = data[feature].iloc[filtered_trades['EntryBar']]
+
+    # Add the rescaled predictions as a new column to the trades DataFrame
+    if use_abs:
+        ft = abs(relevant_predictions.values)
+    else:
+        ft = relevant_predictions.values
+
+    # Filter the trades by the prediction value
+    if exact_value is not None:
+        filtered_trades = filtered_trades.loc[ft == exact_value]
+    else:
+        # closed interval
+        if (min_value is not None) and (max_value is not None):
+            filtered_trades = filtered_trades.loc[min_value < ft < max_value]
+        else:
+            # open intervals
+            if (min_value is not None) and (max_value is None):
+                filtered_trades = filtered_trades.loc[min_value < ft]
+            else:
+                filtered_trades = filtered_trades.loc[ft < max_value]
+
+    return filtered_trades
+
+
 #####################
 # STRATEGIES
 #####################
