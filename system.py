@@ -145,7 +145,7 @@ def filter_trades_by_feature(trades, data, feature, min_value=None, max_value=No
     else:
         # closed interval
         if (min_value is not None) and (max_value is not None):
-            filtered_trades = filtered_trades.loc[min_value <= ft <= max_value]
+            filtered_trades = filtered_trades.loc[(min_value <= ft) & (ft <= max_value)]
         else:
             # open intervals
             if (min_value is not None) and (max_value is None):
