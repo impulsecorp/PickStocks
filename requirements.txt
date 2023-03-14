@@ -1,4 +1,4 @@
-pandas_ta
+pandas_ta==0.2.45b
 tsfel
 empyrical
 gym
