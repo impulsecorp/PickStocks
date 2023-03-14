@@ -1,3 +1,4 @@
+pandas_ta
 tsfel
 empyrical
 gym
