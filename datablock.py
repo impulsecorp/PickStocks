@@ -232,7 +232,6 @@ def procdata(ddd,
             else:
                 count = 0
             x_in_row.append(count)
-            last_move = move
             last_date = date
             last_move = move
         # Add the "X times in row" column to the DataFrame
