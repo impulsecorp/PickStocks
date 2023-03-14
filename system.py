@@ -160,8 +160,26 @@ def filter_trades_by_feature(trades, data, feature, min_value=None, max_value=No
 # STRATEGIES
 #####################
 
+def train_classifier(clf_class, data):
+    print('Training..')
+    try:
+        clf = clf_class(random_state=reseed())
+    except:
+        clf = clf_class()
+    N_TRAIN = int(data.shape[0] * train_set_end)
+    df = data.iloc[0:N_TRAIN]
+    X, y = get_clean_Xy(df)
+    try:
+        clf.fit(X, y)
+    except:
+        clf = LogisticRegression()
+        clf.fit(X, y)
+    print('Classifier trained.')
+    return clf
+
+
 class MLClassifierStrategy(Strategy):
-    clf_class = None
+    clf = None
     period = None
     min_confidence = 0.0
     mode = 'none'  # 'opt', 'test'
@@ -178,11 +196,7 @@ class MLClassifierStrategy(Strategy):
     def init(self):
         # Make indicators and other variables
         self.make_inds()
-        # Init the ensemble of classifier
-        try:
-            self.clf = self.clf_class(random_state=reseed())
-        except:
-            self.clf = self.clf_class()
+
         # Train the classifier in advance on the first N_TRAIN examples
         if (self.mode == 'opt'):
             df = self.data.df.iloc[0:self.N_TRAIN]
@@ -192,12 +206,6 @@ class MLClassifierStrategy(Strategy):
             df = self.data.df.iloc[0:self.N_TRAIN]
         else:
             df = self.data.df.iloc[0:self.N_TRAIN]
-        X, y = get_clean_Xy(df)
-        try:
-            self.clf.fit(X, y)
-        except:
-            self.clf = LogisticRegression()
-            self.clf.fit(X, y)
 
 
     def outofbounds(self):
