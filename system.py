@@ -158,7 +158,11 @@ def filter_trades_by_feature(trades, data, feature, min_value=None, max_value=No
     else:
         # closed interval
         if (min_value is not None) and (max_value is not None):
-            filtered_trades = filtered_trades.loc[(min_value <= ft) & (ft <= max_value)]
+            if min_value == max_value:
+                filtered_trades = filtered_trades.loc[ft == min_value]
+            else:
+                min_value, max_value = np.min([min_value, max_value]), np.max([min_value, max_value]) 
+                filtered_trades = filtered_trades.loc[(min_value <= ft) & (ft <= max_value)]
         else:
             # open intervals
             if (min_value is not None) and (max_value is None):
@@ -204,7 +208,7 @@ def optimize_model(model, model_name, space, X_train, y_train, max_evals=120):
             model.set_params(random_state=newseed(), **best)
         except: 
             model.set_params(**best)
-        model.fit(X_train, y_train)
+        model.fit(X_train[0:15], y_train[0:15])
     except:
         print('No better parameters than the defaults were found.')
         model.set_params(**defaults)
