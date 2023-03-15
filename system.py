@@ -19,25 +19,21 @@ from matplotlib.pyplot import gca
 from matplotlib.pyplot import plot
 from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
-from sklearn.linear_model import LogisticRegression
 from tqdm.notebook import tqdm
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import accuracy_score
-from sklearn.ensemble import VotingClassifier
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import cross_val_score
+from sklearn.ensemble import VotingClassifier, BaggingClassifier
+from sklearn.linear_model import LogisticRegression, RidgeClassifier, RidgeClassifierCV, SGDClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.naive_bayes import GaussianNB
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
 from hyperopt import fmin, tpe, hp
 import warnings
+
 warnings.filterwarnings('ignore')
+
 
 def reseed():
     def seed_everything(s=0):
@@ -50,12 +46,14 @@ def reseed():
         seed = int(stime.time() * 100000) % 1000000
     seed_everything(seed)
     return seed
+
+
 seed = reseed()
 
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
 
-from datetime import datetime, timedelta, time
+from datetime import datetime, time
 
 # global parameters
 
@@ -171,17 +169,27 @@ def filter_trades_by_feature(trades, data, feature, min_value=None, max_value=No
 
     return filtered_trades
 
+def filter_trades_by_confidence(trades, min_conf=None, max_conf=None):
+    if (min_conf is None) and (max_conf is None):
+        return trades
+    elif (min_conf is not None) and (max_conf is None):
+        return trades.loc[(np.abs(0.5-trades['pred'].values)*2.0) > min_conf]
+    elif (min_conf is None) and (max_conf is not None):
+        return trades.loc[(np.abs(0.5 - trades['pred'].values) * 2.0) < max_conf]
+    else:
+        return trades.loc[((np.abs(0.5-trades['pred'].values)*2.0) > min_conf) & ((np.abs(0.5 - trades['pred'].values) * 2.0) < max_conf)]
+
 
 #####################
 # STRATEGIES
 #####################
 
-def train_classifier(clf_class, data):
-    print('Training..')
+def train_classifier(clf_class, data, **kwargs):
+    print('Training', clf_class.__name__.split('.')[-1], '...', end=' ')
     try:
-        clf = clf_class(random_state=reseed())
+        clf = clf_class(random_state=reseed(), **kwargs)
     except:
-        clf = clf_class()
+        clf = clf_class(**kwargs)
     N_TRAIN = int(data.shape[0] * train_set_end)
     df = data.iloc[0:N_TRAIN]
     X, y = get_clean_Xy(df)
@@ -190,7 +198,7 @@ def train_classifier(clf_class, data):
     except:
         clf = LogisticRegression()
         clf.fit(X, y)
-    print('Classifier trained.')
+    print('Done.')
     return clf
 
 
@@ -203,8 +211,7 @@ def optimize_model(model, model_name, space, X_train, y_train, max_evals=120):
     return best
 
 
-
-def train_hpo_ensemble(data):
+def train_hpo_ensemble(data, ensemble_type='bag'):
     print('Training..')
 
     N_TRAIN = int(data.shape[0] * train_set_end)
@@ -219,22 +226,22 @@ def train_hpo_ensemble(data):
          50),
         ("dt", DecisionTreeClassifier(), {"max_depth": hp.choice("max_depth", range(2, 21))},
          50),
-        ("rf", RandomForestClassifier(), {"n_estimators": hp.choice("n_estimators", range(50, 201)),
+        ("rf", RandomForestClassifier(), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
                                           "max_depth": hp.choice("max_depth", range(2, 21))},
          10),
-        ("gb", GradientBoostingClassifier(), {"n_estimators": hp.choice("n_estimators", range(50, 201)),
+        ("gb", GradientBoostingClassifier(), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
                                               "learning_rate": hp.loguniform("learning_rate", -5, 0),
                                               "max_depth": hp.choice("max_depth", range(2, 11))},
          3),
         ("xgb", XGBClassifier(use_label_encoder=False, eval_metric="logloss"),
-         {"n_estimators": hp.choice("n_estimators", range(50, 201)),
+         {"n_estimators": hp.choice("n_estimators", range(5, 201)),
           "learning_rate": hp.loguniform("learning_rate", -5, 0), "max_depth": hp.choice("max_depth", range(2, 11))},
          3),
-        ("lgbm", LGBMClassifier(), {"n_estimators": hp.choice("n_estimators", range(50, 201)),
+        ("lgbm", LGBMClassifier(), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
                                     "learning_rate": hp.loguniform("learning_rate", -5, 0),
                                     "max_depth": hp.choice("max_depth", range(2, 11))},
          3),
-        ("catboost", CatBoostClassifier(verbose=False), {"n_estimators": hp.choice("n_estimators", range(50, 201)),
+        ("catboost", CatBoostClassifier(verbose=False), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
                                                          "learning_rate": hp.loguniform("learning_rate", -5, 0),
                                                          "max_depth": hp.choice("max_depth", range(2, 11))},
          3),
@@ -254,14 +261,11 @@ def train_hpo_ensemble(data):
             model.set_params(**mp)
             optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=8, scoring="accuracy"))
             best_hyperparams = mp
-
         print(
             f"{name}: Default score = {default_score:.4f}, Optimized score = {optimized_score:.4f}, Best hyperparameters = {best_hyperparams}")
         optimized_classifiers.append((name, model))
 
-    # Create ensemble classifier
     ensemble = VotingClassifier(optimized_classifiers, voting="soft")
-
     # Train ensemble on training data
     ensemble.fit(X_train, y_train)
     print('Ensemble trained.')
@@ -269,27 +273,55 @@ def train_hpo_ensemble(data):
     return ensemble
 
 
+def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_features=0.8, **kwargs):
+    clfs = []
+    print(f'Training ensemble: {ensemble_size} classifiers of type {clf_class.__name__.split(".")[-1]}... ', end=' ')
+    for i in range(ensemble_size):
+        try:
+            clf = clf_class(random_state=reseed(), **kwargs)
+        except:
+            clf = clf_class(**kwargs)
+        clfs.append((f'clf_{i}', clf))
+    N_TRAIN = int(data.shape[0] * train_set_end)
+    df = data.iloc[0:N_TRAIN]
+    X_train, y_train = get_clean_Xy(df)
+    # Create ensemble classifier
+    ensemble = BaggingClassifier(estimator=clf, n_estimators=ensemble_size,
+                                 max_samples=max_samples, max_features=max_features,
+                                 oob_score=True, random_state=reseed(), n_jobs=-1)
+    # Train ensemble on training data
+    ensemble.fit(X_train, y_train)
+    print('Done.')
+    return ensemble
+
 
 class MLClassifierStrategy:
-    def __init__(self, cllf, feature_columns: list):
+    def __init__(self, cllf, feature_columns: list, min_confidence=0.0):
         # the sklearn classifier is already fitted to the data, we just store it here
         self.clf = cllf
         self.feature_columns = feature_columns
+        self.min_confidence = min_confidence
 
     def next(self, idx, data):
         # the current row is data[idx]
-
-        # extract features for the current row
-        features = data[self.feature_columns].iloc[idx-1].values.reshape(1, -1)
-
+        # extract features for the previous row
+        features = data[self.feature_columns].iloc[idx - 1].values.reshape(1, -1)
         # get the classifier prediction
-        prediction = self.clf.predict(features)[0]
+        try:
+            prediction = self.clf.predict_proba(features)[0, 1]
+        except NameError:
+            prediction = self.clf.predict(features)[0]
+
+        conf = np.abs(0.5 - prediction) * 2.0
 
         # predicts buy
-        if prediction >= 0.5:
-            return 'buy'
+        if conf > self.min_confidence:
+            if prediction >= 0.5:
+                return 'buy', prediction
+            else:
+                return 'sell', prediction
         else:
-            return 'sell'
+            return 'none', prediction
 
 
 def compute_stats(data, trades):
@@ -297,10 +329,18 @@ def compute_stats(data, trades):
         trades_df = pd.DataFrame(trades)
     else:
         trades_df = trades
-    gross_profit = trades_df[trades_df['profit'] > 0]['profit'].sum()
-    gross_loss = abs(trades_df[trades_df['profit'] < 0]['profit'].sum())
-    profit_factor = gross_profit / gross_loss if gross_loss != 0 else np.inf
-    return profit_factor, trades_df
+    try:
+        gross_profit = trades_df[trades_df['profit'] > 0]['profit'].sum()
+        gross_loss = abs(trades_df[trades_df['profit'] < 0]['profit'].sum())
+        profit_factor = gross_profit / gross_loss if gross_loss != 0 else np.inf
+        return profit_factor, trades_df
+    except:
+        return np.inf, pd.DataFrame(columns=['pos', 'shares', 'entry_datetime', 'exit_datetime', 'entry_bar',
+                                             'exit_bar', 'entry_price', 'exit_price', 'profit'])
+
+
+market_start_time = pd.Timestamp("09:30:00").time()
+market_end_time = pd.Timestamp("16:00:00").time()
 
 
 def backtest_ml_strategy(strategy, data, skip_train=True, skip_val=False, skip_test=True,
@@ -311,7 +351,7 @@ def backtest_ml_strategy(strategy, data, skip_train=True, skip_val=False, skip_t
 
     for idx in tqdm(range(1, len(data))):
         current_time = data.index[idx].time()
-        if current_time < pd.Timestamp("09:30:00").time() or current_time > pd.Timestamp("16:00:00").time():
+        if (current_time < market_start_time) or (current_time > market_end_time):
             # Skip trading in pre/aftermarket hours
             equity_curve[idx] = current_profit
             continue
@@ -322,7 +362,7 @@ def backtest_ml_strategy(strategy, data, skip_train=True, skip_val=False, skip_t
         if (idx > int(val_set_end * len(data))) and skip_test:
             continue
 
-        action = strategy.next(idx, data)
+        action, prediction = strategy.next(idx, data)
 
         entry_price = data.iloc[idx]['Open']
         exit_price = data.iloc[idx]['Close']
@@ -333,204 +373,38 @@ def backtest_ml_strategy(strategy, data, skip_train=True, skip_val=False, skip_t
             profit = (exit_price - entry_price - slippage) * shares - commission
         elif action == 'sell':
             profit = (entry_price - exit_price - slippage) * shares - commission
+        elif action == 'none':
+            profit = 0.0
         else:
             raise ValueError(f"Invalid action '{action}' at index {idx}")
 
         current_profit += profit
         equity_curve[idx] = current_profit
-        trades.append({
-            'pos': action,
-            'shares': shares,
-            'entry_datetime': data.index[idx],
-            'exit_datetime': data.index[idx],
-            'entry_bar': idx,
-            'exit_bar': idx,
-            'entry_price': entry_price,
-            'exit_price': exit_price,
-            'profit': profit
-        })
+        if action != 'none':
+            trades.append({
+                'pos': action,
+                'pred': prediction,
+                'shares': shares,
+                'entry_datetime': data.index[idx],
+                'exit_datetime': data.index[idx],
+                'entry_bar': idx,
+                'exit_bar': idx,
+                'entry_price': entry_price,
+                'exit_price': exit_price,
+                'profit': profit
+            })
 
     return equity_curve, *compute_stats(data, trades)
 
-#
-# class MLEnsembleStrategy(MLClassifierStrategy):
-#     num_clfs = 100
-#     dropout = 0.05
-#
-#     def init(self):
-#         self.make_inds()
-#
-#         # Init the ensemble of classifiers
-#         try:
-#             self.clfs = [self.clf_class() for _ in range(self.num_clfs)]
-#         except:
-#             self.clfs = [LogisticRegression() for _ in range(self.num_clfs)]
-#
-#         # Train the classifiers in advance on the first N_TRAIN examples
-#         df = self.data.df.iloc[:self.N_TRAIN]
-#         X, y = get_clean_Xy(df)
-#         for i,clf in enumerate(self.clfs):
-#             pn = rnd.sample(list(range(len(X))), int(self.dropout * len(X)))
-#             Xt = X.copy()[pn]
-#             yt = y.copy()[pn]
-#             try:
-#                 clf.fit(Xt, yt)
-#             except:
-#                 self.clfs[i] = LogisticRegression()
-#                 self.clfs[i].fit(Xt, yt)
-#
-#     def get_prediction(self):
-#         # Forecast the next movement
-#         X = get_X(self.data.df.iloc[-1:])
-#         return np.mean([clf.predict(X)[0] for clf in self.clfs])
-#
-#
-# class MLSingleParamStrategy(MLClassifierStrategy):
-#     feature_name = None
-#     # True means it will trade only when abs(move) > threshold
-#     # False means it will trade only when move > threshold
-#     take_abs = False
-#
-#
-# class MLEnsembleParamStrategy(MLEnsembleStrategy):
-#     feature_name = None
-#     # True means it will trade only when abs(move) > threshold
-#     # False means it will trade only when move > threshold
-#     take_abs = False
-#
-#
-# # useful for the parametric strategies
-# def getv(self):
-#     v = self.data.df[self.feature_name].iloc[-1:].values[0]
-#     if self.take_abs: v = abs(v)
-#     return v
-#
-#
-# MLSingleParamStrategy.getv = getv
-# MLEnsembleParamStrategy.getv = getv
-#
-#
-# class MLSingleParamEqStrategy(MLSingleParamStrategy):
-#     target = None
-#
-#     def next(self):
-#         if not self.outofbounds():
-#             v = self.getv()
-#             if v == self.target:
-#                 self.act(self.get_prediction())
-#             else:
-#                 self.position.close()
-#         else:
-#             self.position.close()
-#
-#
-# class MLSingleParamTimeEqStrategy(MLSingleParamStrategy):
-#     target = None
-#
-#     def next(self):
-#         if not self.outofbounds():
-#             v = self.data.index[-1].time()
-#             if v == self.target:
-#                 self.act(self.get_prediction())
-#             else:
-#                 self.position.close()
-#         else:
-#             self.position.close()
-#
-#
-# class MLSingleParamOverUnderStrategy(MLSingleParamStrategy):
-#     threshold = None
-#     direction = 'above'  # or below
-#
-#     def next(self):
-#         if not self.outofbounds():
-#             v = self.getv()
-#             if ((self.direction == 'above') or (self.direction == 1)) and (v > self.threshold):
-#                 self.act(self.get_prediction())
-#             elif ((self.direction == 'below') or (self.direction == -1)) and (v < self.threshold):
-#                 self.act(self.get_prediction())
-#             else:
-#                 self.position.close()
-#         else:
-#             self.position.close()
-#
-#
-# class MLEnsembleParamEqStrategy(MLEnsembleParamStrategy):
-#     target = None
-#
-#     def next(self):
-#         if not self.outofbounds():
-#             v = self.getv()
-#             if v == self.target:
-#                 self.act(self.get_prediction())
-#             else:
-#                 self.position.close()
-#         else:
-#             self.position.close()
-#
-#
-# class MLEnsembleParamTimeEqStrategy(MLEnsembleParamStrategy):
-#     target = None
-#
-#     def next(self):
-#         if not self.outofbounds():
-#             v = self.data.index[-1].time()
-#             if v == self.target:
-#                 self.act(self.get_prediction())
-#             else:
-#                 self.position.close()
-#         else:
-#             self.position.close()
-#
-#
-# class MLEnsembleParamOverUnderStrategy(MLEnsembleParamStrategy):
-#     threshold = None
-#     direction = 'above'  # or below
-#
-#     def next(self):
-#         if not self.outofbounds():
-#             v = self.getv()
-#             if ((self.direction == 'above') or (self.direction == 1)) and (v > self.threshold):
-#                 self.act(self.get_prediction())
-#             elif ((self.direction == 'below') or (self.direction == -1)) and (v < self.threshold):
-#                 self.act(self.get_prediction())
-#             else:
-#                 self.position.close()
-#         else:
-#             self.position.close()
-#
-#
-# class MLSingleMultiParamStrategy(MLClassifierStrategy):
-#     feature_names = None
-#     take_abs = None
-#
-#
-# def getmv(self):
-#     # get all feature names
-#     fnames = sorted([x for x in dir(self) if (x[0:3]=='X__')])
-#     vs = []
-#     for i, feature_name in enumerate(fnames):
-#         v = self.data.df[feature_name.replace('_target_134','')].iloc[-1:].values[0]
-#         # if self.take_abs[i]: v = abs(v)
-#         vs.append(v)
-#     return vs
-#
-# MLSingleMultiParamStrategy.getmv = getmv
-#
-# class MLSingleMultiParamEqStrategy(MLSingleMultiParamStrategy):
-#     def next(self):
-#         targets = sorted([x for x in dir(self) if (x[0:3] == 'X__')])
-#
-#         if not self.outofbounds():
-#             vs = self.getmv()
-#             if any([(x == getattr(self, y)) for x,y in zip(vs, targets)]):
-#                 self.act(self.get_prediction())
-#             else:
-#                 self.position.close()
-#         else:
-#             self.position.close()
-
-
+def qbacktest(clf, data, quiet=0, **kwargs):
+    s = MLClassifierStrategy(clf, list(data.filter(like='X')))
+    equity, pf, trades = backtest_ml_strategy(s, data, **kwargs)
+    if not quiet:
+        plt.plot(equity);
+        plt.xlabel('Bar #')
+        plt.ylabel('Profit')
+        print(f'Profit factor: {pf}, trades: {len(trades)}')
+    return equity, pf, trades
 
 
 #####################
