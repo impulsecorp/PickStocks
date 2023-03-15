@@ -1,13 +1,8 @@
 import datetime
 import os
 
-# os.environ['BOKEH_RESOURCES'] = 'inline'
-# import bokeh.util.warnings
 import warnings
-
 warnings.filterwarnings('ignore')
-# warnings.filterwarnings('ignore', category=bokeh.util.warnings.BokehDeprecationWarning, module='bokeh')
-# warnings.filterwarnings('ignore', category=bokeh.util.warnings.BokehUserWarning, module='bokeh')
 import random as rnd
 import time as stime
 
@@ -21,7 +16,7 @@ from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
 from tqdm.notebook import tqdm
 from sklearn.model_selection import cross_val_score
-from sklearn.ensemble import VotingClassifier, BaggingClassifier
+from sklearn.ensemble import VotingClassifier, BaggingClassifier, ExtraTreesClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
@@ -30,9 +25,6 @@ from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
 from hyperopt import fmin, tpe, hp
-import warnings
-
-warnings.filterwarnings('ignore')
 
 
 def reseed():
@@ -47,6 +39,11 @@ def reseed():
     seed_everything(seed)
     return seed
 
+def newseed():
+    seed = 0
+    while seed == 0:
+        seed = int(stime.time() * 100000) % 1000000
+    return seed
 
 seed = reseed()
 
@@ -190,15 +187,29 @@ def filter_trades_by_confidence(trades, min_conf=None, max_conf=None):
 
 
 def optimize_model(model, model_name, space, X_train, y_train, max_evals=120):
+    defaults = model.get_params()
     def objective(params):
-        model.set_params(**params)
         try:
+            model.set_params(random_state=newseed(), **params)
             score = -np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
+            return score
         except:
-            score = 99999.0
-        return score
+            return 9999999.0
 
-    best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=max_evals)
+    best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=max_evals )
+    
+    # if we can't instantiate and train the model, use the defaults
+    try:
+        try:
+            model.set_params(random_state=newseed(), **best)
+        except: 
+            model.set_params(**best)
+        model.fit(X_train, y_train)
+    except:
+        print('No better parameters than the defaults were found.')
+        model.set_params(**defaults)
+        best = defaults
+
     return best
 
 
@@ -246,15 +257,17 @@ def train_hpo_ensemble(data):
     for name, model, space, max_evals in classifiers:
         print(f"Optimizing {name}...")
         default_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
+        def_params = model.get_params()
         best_hyperparams = optimize_model(model, name, space, X_train, y_train, max_evals=max_evals)
-        mp = model.get_params()
         try:
             model.set_params(**best_hyperparams)
+            model.fit( X_train, y_train )
             optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
         except:
-            model.set_params(**mp)
+            print('Problematic config found, reverting to default parameters.')
+            model.set_params(**def_params)
             optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
-            best_hyperparams = mp
+            best_hyperparams = def_params
         print(
             f"{name}: Default score = {default_score:.4f}, Optimized score = {optimized_score:.4f}, Best hyperparameters = {best_hyperparams}")
         optimized_classifiers.append((name, model))
@@ -273,7 +286,7 @@ def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_feat
     print(f'Training ensemble: {ensemble_size} classifiers of type {clf_class.__name__.split(".")[-1]}... ', end=' ')
     for i in range(ensemble_size):
         try:
-            clf = clf_class(random_state=reseed(), **kwargs)
+            clf = clf_class(random_state=newseed(), **kwargs)
         except:
             clf = clf_class(**kwargs)
         clfs.append((f'clf_{i}', clf))
@@ -283,7 +296,7 @@ def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_feat
     # Create ensemble classifier
     ensemble = BaggingClassifier(estimator=clf, n_estimators=ensemble_size,
                                  max_samples=max_samples, max_features=max_features,
-                                 oob_score=True, random_state=reseed(), n_jobs=-1)
+                                 oob_score=True, random_state=newseed(), n_jobs=-1)
     # Train ensemble on training data
     ensemble.fit(X_train, y_train)
     print(
@@ -293,18 +306,13 @@ def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_feat
 
 def train_classifier(clf_class, data, **kwargs):
     print('Training', clf_class.__name__.split('.')[-1], '...', end=' ')
-    try:
-        clf = clf_class(random_state=reseed(), **kwargs)
-    except:
-        clf = clf_class(**kwargs)
+
+    clf = clf_class(**kwargs)
+
     N_TRAIN = int(data.shape[0] * train_set_end)
     df = data.iloc[0:N_TRAIN]
     X, y = get_clean_Xy(df)
-    try:
-        clf.fit(X, y)
-    except:
-        clf = LogisticRegression()
-        clf.fit(X, y)
+    clf.fit(X, y)
     print(f'Done. Mean CV score: {np.mean(cross_val_score(clf, X, y, cv=cv_folds, scoring="accuracy")):.5f}')
     return clf
 
@@ -317,9 +325,13 @@ class MLClassifierStrategy:
         self.min_confidence = min_confidence
 
     def next(self, idx, data):
+        if not hasattr(self, 'datafeats'):
+            self.datafeats = data[self.feature_columns].values
+
         # the current row is data[idx]
         # extract features for the previous row
-        features = data[self.feature_columns].iloc[idx - 1].values.reshape(1, -1)
+        features = self.datafeats[idx - 1].reshape(1, -1)
+        
         # get the classifier prediction
         try:
             prediction = self.clf.predict_proba(features)[0, 1]
@@ -405,8 +417,8 @@ def get_winner_pct(trades):
 
 
 def get_profit_factor(trades):
-    gross_profit = trades[trades['profit'] > 0]['profit'].sum()
-    gross_loss = abs(trades[trades['profit'] < 0]['profit'].sum())
+    gross_profit = trades[trades['profit'] >= 0]['profit'].sum()
+    gross_loss = np.abs(trades[trades['profit'] < 0]['profit'].sum())
     profit_factor = gross_profit / gross_loss if gross_loss != 0 else -1
     return profit_factor
 
