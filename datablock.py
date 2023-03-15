@@ -129,7 +129,7 @@ def procdata(ddd,
             X = ts.time_series_features_extractor(cfg, data[i:i + dwinlen], verbose=0)
             dw.append(X.values)
         dw = np.vstack(dw)
-        cs = ['X'+uchar+'MMM' + str(i) for i in range(dw.shape[1])]
+        cs = ['X'+uchar+'mmm' + str(i) for i in range(dw.shape[1])]
         d = pd.DataFrame(dw, columns=cs, index=data.index)
         data = pd.concat([data, d], axis=1)
 

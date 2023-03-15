@@ -24,7 +24,7 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
-from hyperopt import fmin, tpe, hp
+from hyperopt import fmin, tpe, hp, rand
 
 
 def reseed():
@@ -139,9 +139,9 @@ def featdeformat(s):
     return s[len('X__'):].replace('_', ' ').replace('-', ' ')
 
 
-def filter_trades_by_feature(trades, data, feature, min_value=None, max_value=None, exact_value=None, use_abs=False):
+def filter_trades_by_feature(the_trades, data, feature, min_value=None, max_value=None, exact_value=None, use_abs=False):
     # Create a copy of the trades DataFrame
-    filtered_trades = trades.copy()
+    filtered_trades = the_trades.copy()
 
     # Get the relevant portion of the predictions indicator that corresponds to the trades
     relevant_predictions = data[feature].iloc[filtered_trades['entry_bar']]
@@ -173,16 +173,17 @@ def filter_trades_by_feature(trades, data, feature, min_value=None, max_value=No
     return filtered_trades
 
 
-def filter_trades_by_confidence(trades, min_conf=None, max_conf=None):
+def filter_trades_by_confidence(the_trades, min_conf=None, max_conf=None):
+    trs = the_trades.copy()
     if (min_conf is None) and (max_conf is None):
-        return trades
+        return trs
     elif (min_conf is not None) and (max_conf is None):
-        return trades.loc[(np.abs(0.5 - trades['pred'].values) * 2.0) >= min_conf]
+        return trs.loc[(np.abs(0.5 - trs['pred'].values) * 2.0) >= min_conf]
     elif (min_conf is None) and (max_conf is not None):
-        return trades.loc[(np.abs(0.5 - trades['pred'].values) * 2.0) <= max_conf]
+        return trs.loc[(np.abs(0.5 - trs['pred'].values) * 2.0) <= max_conf]
     else:
-        return trades.loc[((np.abs(0.5 - trades['pred'].values) * 2.0) >= min_conf) & (
-                    (np.abs(0.5 - trades['pred'].values) * 2.0) <= max_conf)]
+        return trs.loc[((np.abs(0.5 - trs['pred'].values) * 2.0) >= min_conf) & (
+                    (np.abs(0.5 - trs['pred'].values) * 2.0) <= max_conf)]
 
 
 #####################
@@ -200,7 +201,7 @@ def optimize_model(model, model_name, space, X_train, y_train, max_evals=120):
         except:
             return 9999999.0
 
-    best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=max_evals )
+    best = fmin(fn=objective, space=space, algo=rand.suggest, max_evals=max_evals )
     
     # if we can't instantiate and train the model, use the defaults
     try:
@@ -361,7 +362,7 @@ market_end_time = pd.Timestamp("16:00:00").time()
 def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
                          commission=0.0, slippage=0.0, position_value=100000):
     equity_curve = np.zeros(len(data))
-    trades = []
+    atrades = []
     current_profit = 0
 
     for idx in tqdm(range(1, len(data))):
@@ -396,7 +397,7 @@ def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
         current_profit += profit
         equity_curve[idx] = current_profit
         if action != 'none':
-            trades.append({
+            atrades.append({
                 'pos': action,
                 'pred': prediction,
                 'shares': shares,
@@ -409,20 +410,22 @@ def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
                 'profit': profit
             })
 
-    return equity_curve, *compute_stats(data, trades)
+    return equity_curve, *compute_stats(data, atrades)
 
 
 def get_winner_pct(trades):
-    if len(trades) > 0:
-        winners = (len(trades.loc[trades['profit'].values >= 0.0]) / len(trades)) * 100.0
+    atrades = trades.copy()
+    if len(atrades) > 0:
+        winners = (len(atrades.loc[atrades['profit'].values >= 0.0]) / len(atrades)) * 100.0
     else:
         winners = -1.0
     return winners
 
 
 def get_profit_factor(trades):
-    gross_profit = trades[trades['profit'] >= 0]['profit'].sum()
-    gross_loss = np.abs(trades[trades['profit'] < 0]['profit'].sum())
+    atrades = trades.copy()
+    gross_profit = atrades[atrades['profit'] >= 0]['profit'].sum()
+    gross_loss = np.abs(atrades[atrades['profit'] < 0]['profit'].sum())
     profit_factor = gross_profit / gross_loss if gross_loss != 0 else -1
     return profit_factor
 
@@ -431,7 +434,7 @@ def compute_stats(data, trades):
     if not isinstance(trades, pd.DataFrame):
         trades_df = pd.DataFrame(trades)
     else:
-        trades_df = trades
+        trades_df = trades.copy()
     try:
         return get_profit_factor(trades_df), trades_df
     except:
@@ -441,13 +444,13 @@ def compute_stats(data, trades):
 
 def qbacktest(clf, data, quiet=0, **kwargs):
     s = MLClassifierStrategy(clf, list(data.filter(like='X')))
-    equity, pf, trades = backtest_ml_strategy(s, data, **kwargs)
+    equity, pf, ktrades = backtest_ml_strategy(s, data, **kwargs)
     if not quiet:
         plt.plot(equity)
         plt.xlabel('Bar #')
         plt.ylabel('Profit')
-        print(f'Profit factor: {pf:.5f}, Winners: {get_winner_pct(trades):.2f}%, Trades: {len(trades)}')
-    return equity, pf, trades
+        print(f'Profit factor: {pf:.5f}, Winners: {get_winner_pct(ktrades):.2f}%, Trades: {len(ktrades)}')
+    return equity, pf, ktrades
 
 
 #####################
