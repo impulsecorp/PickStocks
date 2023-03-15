@@ -339,13 +339,15 @@ class MLClassifierStrategy:
         
         # get the classifier prediction
         try:
-            prediction = self.clf.predict_proba(features)[0, 1]
+            try:
+                prediction = self.clf.predict_proba(features)[0, 1]
+            except:
+                prediction = self.clf.predict_proba(pd.DataFrame(features)).values[0, 1]
+
         except NameError:
-            prediction = self.clf.predict(features)[0]
+            prediction = self.clf.predict(data[self.feature_columns].iloc[idx])[0]
 
         conf = np.abs(0.5 - prediction) * 2.0
-
-        # predicts buy
         if conf > self.min_confidence:
             if prediction >= 0.5:
                 return 'buy', prediction
