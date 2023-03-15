@@ -21,8 +21,8 @@ from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
 from tqdm.notebook import tqdm
 from sklearn.model_selection import cross_val_score
-from sklearn.ensemble import VotingClassifier, BaggingClassifier, ExtraTreesClassifier
-from sklearn.linear_model import LogisticRegression, RidgeClassifier, RidgeClassifierCV, SGDClassifier
+from sklearn.ensemble import VotingClassifier, BaggingClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -65,6 +65,7 @@ val_set_end = 0.7  # percentage point specifying the validation set end point (1
 max_tries = 0.2  # for optimization, percentage of the grid space to cover (1.0 = exchaustive search)
 
 cv_folds = 5
+
 
 # the objective function to maximize during optimization
 def objective(s):
@@ -170,15 +171,17 @@ def filter_trades_by_feature(trades, data, feature, min_value=None, max_value=No
 
     return filtered_trades
 
+
 def filter_trades_by_confidence(trades, min_conf=None, max_conf=None):
     if (min_conf is None) and (max_conf is None):
         return trades
     elif (min_conf is not None) and (max_conf is None):
-        return trades.loc[(np.abs(0.5-trades['pred'].values)*2.0) >= min_conf]
+        return trades.loc[(np.abs(0.5 - trades['pred'].values) * 2.0) >= min_conf]
     elif (min_conf is None) and (max_conf is not None):
         return trades.loc[(np.abs(0.5 - trades['pred'].values) * 2.0) <= max_conf]
     else:
-        return trades.loc[((np.abs(0.5-trades['pred'].values)*2.0) >= min_conf) & ((np.abs(0.5 - trades['pred'].values) * 2.0) <= max_conf)]
+        return trades.loc[((np.abs(0.5 - trades['pred'].values) * 2.0) >= min_conf) & (
+                    (np.abs(0.5 - trades['pred'].values) * 2.0) <= max_conf)]
 
 
 #####################
@@ -259,7 +262,8 @@ def train_hpo_ensemble(data):
     ensemble = VotingClassifier(optimized_classifiers, voting="soft")
     # Train ensemble on training data
     ensemble.fit(X_train, y_train)
-    print(f'Ensemble trained. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
+    print(
+        f'Ensemble trained. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
 
     return ensemble
 
@@ -282,7 +286,8 @@ def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_feat
                                  oob_score=True, random_state=reseed(), n_jobs=-1)
     # Train ensemble on training data
     ensemble.fit(X_train, y_train)
-    print(f'Done. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
+    print(
+        f'Done. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
     return ensemble
 
 
@@ -302,7 +307,6 @@ def train_classifier(clf_class, data, **kwargs):
         clf.fit(X, y)
     print(f'Done. Mean CV score: {np.mean(cross_val_score(clf, X, y, cv=cv_folds, scoring="accuracy")):.5f}')
     return clf
-
 
 
 class MLClassifierStrategy:
@@ -332,21 +336,6 @@ class MLClassifierStrategy:
                 return 'sell', prediction
         else:
             return 'none', prediction
-
-
-def compute_stats(data, trades):
-    if not isinstance(trades, pd.DataFrame):
-        trades_df = pd.DataFrame(trades)
-    else:
-        trades_df = trades
-    try:
-        gross_profit = trades_df[trades_df['profit'] > 0]['profit'].sum()
-        gross_loss = abs(trades_df[trades_df['profit'] < 0]['profit'].sum())
-        profit_factor = gross_profit / gross_loss if gross_loss != 0 else np.inf
-        return profit_factor, trades_df
-    except:
-        return np.inf, pd.DataFrame(columns=['pos', 'shares', 'entry_datetime', 'exit_datetime', 'entry_bar',
-                                             'exit_bar', 'entry_price', 'exit_price', 'profit'])
 
 
 market_start_time = pd.Timestamp("09:30:00").time()
@@ -406,15 +395,42 @@ def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
 
     return equity_curve, *compute_stats(data, trades)
 
+
+def get_winner_pct(trades):
+    if len(trades) > 0:
+        winners = (len(trades.loc[trades['profit'].values >= 0.0]) / len(trades)) * 100.0
+    else:
+        winners = -1.0
+    return winners
+
+
+def get_profit_factor(trades):
+    gross_profit = trades[trades['profit'] > 0]['profit'].sum()
+    gross_loss = abs(trades[trades['profit'] < 0]['profit'].sum())
+    profit_factor = gross_profit / gross_loss if gross_loss != 0 else -1
+    return profit_factor
+
+
+def compute_stats(data, trades):
+    if not isinstance(trades, pd.DataFrame):
+        trades_df = pd.DataFrame(trades)
+    else:
+        trades_df = trades
+    try:
+        return get_profit_factor(trades_df), trades_df
+    except:
+        return -1, pd.DataFrame(columns=['pos', 'shares', 'entry_datetime', 'exit_datetime', 'entry_bar',
+                                         'exit_bar', 'entry_price', 'exit_price', 'profit'])
+
+
 def qbacktest(clf, data, quiet=0, **kwargs):
     s = MLClassifierStrategy(clf, list(data.filter(like='X')))
     equity, pf, trades = backtest_ml_strategy(s, data, **kwargs)
     if not quiet:
-        winners = (len(trades.loc[ trades['profit'].values >= 0.0]) / len(trades)) * 100.0
         plt.plot(equity)
         plt.xlabel('Bar #')
         plt.ylabel('Profit')
-        print(f'Profit factor: {pf:.5f}, Winners: {winners:.2f}%, Trades: {len(trades)}')
+        print(f'Profit factor: {pf:.5f}, Winners: {get_winner_pct(trades):.2f}%, Trades: {len(trades)}')
     return equity, pf, trades
 
 

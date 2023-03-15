@@ -5,12 +5,99 @@ from tqdm.notebook import tqdm
 import pandas_ta as ta
 from system import make_dataset, get_data, shuffle_split, make_synth_data
 
+def compute_custom_features(close, data, high, low, open_, uchar):
+    # Some datetime features for good measure
+    data['X' + uchar + 'day'] = data.index.dayofweek
+    data['X' + uchar + 'hour'] = data.index.hour
+    # Additional custom features
+    # Convert the index to datetime and create a temporary date variable
+    dix = pd.to_datetime(data.index)
+    dates = dix.date
+    # Calculate the "overnight move" indicator
+    overnight_move = []
+    last_open = None
+    overnight = 0
+    for i, (xopen_, date) in enumerate(zip(open_.values, dates)):
+        if (i > 0) and (date != dates[i - 1]):
+            overnight = xopen_ - last_open
+        overnight_move.append(overnight)
+        last_open = xopen_
+        # Add the "overnight move" column to the DataFrame
+    data['X' + uchar + 'overnight_move'] = overnight_move
+    b = open_.values[1:] - open_.values[0:-1]
+    b = np.hstack([np.zeros(1), b])
+    data['X' + uchar + 'open_move'] = b
+    b = high.shift(1).values[1:] - high.shift(1).values[0:-1]
+    b = np.hstack([np.zeros(1), b])
+    data['X' + uchar + 'high_move'] = b
+    b = low.shift(1).values[1:] - low.shift(1).values[0:-1]
+    b = np.hstack([np.zeros(1), b])
+    data['X' + uchar + 'low_move'] = b
+    b = close.shift(1).values[1:] - close.shift(1).values[0:-1]
+    b = np.hstack([np.zeros(1), b])
+    data['X' + uchar + 'close_move'] = b
+    b = close.shift(1).values - open_.shift(1).values
+    data['X' + uchar + 'last_move'] = b
+    b = high.shift(1).values - low.shift(1).values
+    data['X' + uchar + 'last_span'] = b
+    # times in row
+    # Calculate the "X times in row" indicator
+    x_in_row = []
+    count = 0
+    last_move = 0
+    last_date = None
+    for i, move in enumerate(data['X' + uchar + 'last_move']):
+        date = dates[i]
+        if date != last_date:
+            count = 0
+        if move * last_move > 0 and move != 0:
+            count += 1
+        else:
+            count = 0
+        x_in_row.append(count)
+        last_date = date
+        last_move = move
+    # Add the "X times in row" column to the DataFrame
+    data['X' + uchar + 'times_in_row'] = x_in_row
+
+    def mlag(n=1):
+        b = open_.values[n:] - open_.values[0:-n]
+        b = np.hstack([np.zeros(n), b])
+        return b
+
+    data['X' + uchar + 'pmove_2'] = mlag(2)
+    data['X' + uchar + 'pmove_3'] = mlag(3)
+    data['X' + uchar + 'pmove_4'] = mlag(4)
+    data['X' + uchar + 'pmove_5'] = mlag(5)
+    data['X' + uchar + 'pmove_10'] = mlag(10)
+
+    # Compute the overnight move direction
+    data['X' + uchar + 'overnight_direction'] = np.where(data['X' + uchar + 'overnight_move'] > 0, 1, -1)
+    # Compute yesterday's close-to-open move
+    yesterday_close = close.shift(1)
+    yesterday_open = open_.shift(1)
+    data['X' + uchar + 'yesterday_move'] = yesterday_open - yesterday_close
+    # Indicator 1: Overnight move in the same direction as yesterday's close-to-open move
+    data['X' + uchar + 'f1'] = np.where(
+        data['X' + uchar + 'overnight_direction'].values == np.sign(data['X' + uchar + 'yesterday_move'].values), 1, 0)
+    # Indicator 2: Today's open is above yesterday's high
+    data['X' + uchar + 'f2'] = np.where(open_ > high.shift(1), 1, 0)
+    # Indicator 3: Today's open is below yesterday's low
+    data['X' + uchar + 'f3'] = np.where(open_ < low.shift(1), 1, 0)
+    # Indicator 4: Today's open is above yesterday's open but below yesterday's high
+    data['X' + uchar + 'f4'] = np.where((open_ > yesterday_open) & (open_ < high.shift(1)), 1, 0)
+    # Indicator 5: Today's open is below yesterday's close, but above yesterday's low
+    data['X' + uchar + 'f5'] = np.where((open_ < yesterday_close) & (open_ > low.shift(1)), 1, 0)
+    # Indicator 6: Today's open is between yesterday's open and close
+    data['X' + uchar + 'f6'] = np.where((open_ > np.minimum(yesterday_open, yesterday_close)) &
+                                        (open_ < np.maximum(yesterday_open, yesterday_close)), 1, 0)
+
 didx = 0
 data = None
 dindex = None
 
 def procdata(ddd, 
-             use_tsfel=False, dwinlen=60, 
+             use_tsfel=True, dwinlen=60,
              use_forex=False, double_underscore=True,
              cut_first_N=-1): 
     global data, dindex
@@ -189,91 +276,7 @@ def procdata(ddd,
         addx(ta.zlma(close, length=None, mamode=None, offset=None))
         addx(ta.zscore(close, length=None, std=None, offset=None))
 
-    if 1:
-        # Some datetime features for good measure
-        data['X'+uchar+'day'] = data.index.dayofweek
-        data['X'+uchar+'hour'] = data.index.hour
-
-        # Additional custom features
-
-        # Convert the index to datetime and create a temporary date variable
-        dix = pd.to_datetime(data.index)
-        dates = dix.date
-
-        # Calculate the "overnight move" indicator
-        overnight_move = []
-        last_open = None
-        overnight = 0
-        for i, (xopen_, date) in enumerate(zip(open_.values, dates)):
-            if (i > 0) and (date != dates[i-1]):
-                overnight = xopen_ - last_open
-            overnight_move.append(overnight)
-            last_open = xopen_ 
-        # Add the "overnight move" column to the DataFrame
-        data['X'+uchar+'overnight_move'] = overnight_move
-
-        b = open_.values[1:] - open_.values[0:-1]
-        b = np.hstack([np.zeros(1), b])
-        data['X'+uchar+'move'] = b
-
-        # times in row
-
-        # Calculate the "X times in row" indicator
-        x_in_row = []
-        count = 0
-        last_move = 0
-        last_date = None
-        for i, move in enumerate(data['X'+uchar+'move']):
-            date = dates[i]
-            if date != last_date:
-                count = 0
-            if move * last_move > 0 and move != 0:
-                count += 1
-            else:
-                count = 0
-            x_in_row.append(count)
-            last_date = date
-            last_move = move
-        # Add the "X times in row" column to the DataFrame
-        data['X'+uchar+'times_in_row'] = x_in_row
-
-        def mlag(n=1):
-            b = open_.values[n:] - open_.values[0:-n]
-            b = np.hstack([np.zeros(n), b])
-            return b
-        data['X'+uchar+'pmove_2'] = mlag(2)
-        data['X'+uchar+'pmove_3'] = mlag(3)
-        data['X'+uchar+'pmove_5'] = mlag(5)
-        data['X'+uchar+'pmove_10'] = mlag(10)
-        data['X'+uchar+'pmove_20'] = mlag(20)
-
-        # Compute the overnight move direction
-        data['X'+uchar+'overnight_direction'] = np.where(data['X'+uchar+'overnight_move'] > 0, 1, -1)
-
-        # Compute yesterday's close-to-open move
-        yesterday_close = close.shift(1)
-        yesterday_open = open_.shift(1)
-        data['X'+uchar+'yesterday_move'] = yesterday_open - yesterday_close
-
-        # Indicator 1: Overnight move in the same direction as yesterday's close-to-open move
-        data['X'+uchar+'f1'] = np.where(data['X'+uchar+'overnight_direction'].values == np.sign(data['X'+uchar+'yesterday_move'].values), 1, 0)
-
-        # Indicator 2: Today's open is above yesterday's high
-        data['X'+uchar+'f2'] = np.where(open_ > high.shift(1), 1, 0)
-
-        # Indicator 3: Today's open is below yesterday's low
-        data['X'+uchar+'f3'] = np.where(open_ < low.shift(1), 1, 0)
-
-        # Indicator 4: Today's open is above yesterday's open but below yesterday's high
-        data['X'+uchar+'f4'] = np.where((open_ > yesterday_open) & (open_ < high.shift(1)), 1, 0)
-
-        # Indicator 5: Today's open is below yesterday's close, but above yesterday's low
-        data['X'+uchar+'f5'] = np.where((open_ < yesterday_close) & (open_ > low.shift(1)), 1, 0)
-
-        # Indicator 6: Today's open is between yesterday's open and close
-        data['X'+uchar+'f6'] = np.where((open_ > np.minimum(yesterday_open, yesterday_close)) & 
-                            (open_ < np.maximum(yesterday_open, yesterday_close)), 1, 0)
-
+    compute_custom_features(close, data, high, low, open_, uchar)
 
     data.replace([np.inf, -np.inf], np.nan, inplace=True)
     data = data.fillna(0).astype(float)
@@ -296,10 +299,7 @@ def procdata(ddd,
 
 
 
-def procdata_lite(ddd, 
-             use_tsfel=False, dwinlen=60, 
-             use_forex=False, double_underscore=True,
-             cut_first_N=-1): 
+def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
     global data, dindex
     data = ddd
     dindex = ddd.index
@@ -311,14 +311,13 @@ def procdata_lite(ddd,
     def addx(x):
         global data, didx, dindex
         if len(x.shape) > 1:
-            dx = x.rename(lambda k: 'X' + uchar + k, axis=1)
+            dx = x.rename(lambda k: 'X' + uchar + k.lower(), axis=1)
             data = pd.concat([data, dx], axis=1)
             data.index = dindex
         else:
             didx += 1
-            data['X' + uchar + str(didx)] = x
+            data['X' + uchar + str(didx).lower()] = x
             data.index = dindex
-
 
     open_ = data.open
     high = data.high
@@ -363,89 +362,7 @@ def procdata_lite(ddd,
         addx(ta.supertrend(high, low, close, length=None, multiplier=None, offset=None))   
         addx(ta.willr(high, low, close, length=None, offset=None))
 
-    if 1:
-        # Some datetime features for good measure
-        data['X'+uchar+'day'] = data.index.dayofweek
-        data['X'+uchar+'hour'] = data.index.hour
-
-        # Additional custom features
-
-        # Convert the index to datetime and create a temporary date variable
-        dix = pd.to_datetime(data.index)
-        dates = dix.date
-
-        # Calculate the "overnight move" indicator
-        overnight_move = []
-        last_open = None
-        overnight = 0
-        for i, (xopen_, date) in enumerate(zip(open_.values, dates)):
-            if (i > 0) and (date != dates[i-1]):
-                overnight = xopen_ - last_open
-            overnight_move.append(overnight)
-            last_open = xopen_ 
-        # Add the "overnight move" column to the DataFrame
-        data['X'+uchar+'overnight_move'] = overnight_move
-
-        b = open_.values[1:] - open_.values[0:-1]
-        b = np.hstack([np.zeros(1), b])
-        data['X'+uchar+'move'] = b
-
-        # times in row
-
-        # Calculate the "X times in row" indicator
-        x_in_row = []
-        count = 0
-        last_move = 0
-        last_date = None
-        for i, move in enumerate(data['X'+uchar+'move']):
-            date = dates[i]
-            if date != last_date:
-                count = 0
-            if move * last_move > 0 and move != 0:
-                count += 1
-            else:
-                count = 0
-            x_in_row.append(count)
-            last_move = move
-            last_date = date
-            last_move = move
-        # Add the "X times in row" column to the DataFrame
-        data['X'+uchar+'times_in_row'] = x_in_row
-
-        def mlag(n=1):
-            b = open_.values[n:] - open_.values[0:-n]
-            b = np.hstack([np.zeros(n), b])
-            return b
-        data['X'+uchar+'pmove_2'] = mlag(2)
-
-
-        # Compute the overnight move direction
-        data['X'+uchar+'overnight_direction'] = np.where(data['X'+uchar+'overnight_move'] > 0, 1, -1)
-
-        # Compute yesterday's close-to-open move
-        yesterday_close = close.shift(1)
-        yesterday_open = open_.shift(1)
-        data['X'+uchar+'yesterday_move'] = yesterday_open - yesterday_close
-
-        # Indicator 1: Overnight move in the same direction as yesterday's close-to-open move
-        data['X'+uchar+'f1'] = np.where(data['X'+uchar+'overnight_direction'].values == np.sign(data['X'+uchar+'yesterday_move'].values), 1, 0)
-
-        # Indicator 2: Today's open is above yesterday's high
-        data['X'+uchar+'f2'] = np.where(open_ > high.shift(1), 1, 0)
-
-        # Indicator 3: Today's open is below yesterday's low
-        data['X'+uchar+'f3'] = np.where(open_ < low.shift(1), 1, 0)
-
-        # Indicator 4: Today's open is above yesterday's open but below yesterday's high
-        data['X'+uchar+'f4'] = np.where((open_ > yesterday_open) & (open_ < high.shift(1)), 1, 0)
-
-        # Indicator 5: Today's open is below yesterday's close, but above yesterday's low
-        data['X'+uchar+'f5'] = np.where((open_ < yesterday_close) & (open_ > low.shift(1)), 1, 0)
-
-        # Indicator 6: Today's open is between yesterday's open and close
-        data['X'+uchar+'f6'] = np.where((open_ > np.minimum(yesterday_open, yesterday_close)) & 
-                            (open_ < np.maximum(yesterday_open, yesterday_close)), 1, 0)
-
+    compute_custom_features(close, data, high, low, open_, uchar)
 
     data.replace([np.inf, -np.inf], np.nan, inplace=True)
     data = data.fillna(0).astype(float)
@@ -462,3 +379,5 @@ def procdata_lite(ddd,
                         }, axis=1)
     print('Done.')
     return data
+
+
