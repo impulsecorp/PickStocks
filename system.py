@@ -21,7 +21,7 @@ from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
 from tqdm.notebook import tqdm
 from sklearn.model_selection import cross_val_score
-from sklearn.ensemble import VotingClassifier, BaggingClassifier
+from sklearn.ensemble import VotingClassifier, BaggingClassifier, ExtraTreesClassifier
 from sklearn.linear_model import LogisticRegression, RidgeClassifier, RidgeClassifierCV, SGDClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
@@ -64,6 +64,7 @@ val_set_end = 0.7  # percentage point specifying the validation set end point (1
 
 max_tries = 0.2  # for optimization, percentage of the grid space to cover (1.0 = exchaustive search)
 
+cv_folds = 5
 
 # the objective function to maximize during optimization
 def objective(s):
@@ -173,45 +174,32 @@ def filter_trades_by_confidence(trades, min_conf=None, max_conf=None):
     if (min_conf is None) and (max_conf is None):
         return trades
     elif (min_conf is not None) and (max_conf is None):
-        return trades.loc[(np.abs(0.5-trades['pred'].values)*2.0) > min_conf]
+        return trades.loc[(np.abs(0.5-trades['pred'].values)*2.0) >= min_conf]
     elif (min_conf is None) and (max_conf is not None):
-        return trades.loc[(np.abs(0.5 - trades['pred'].values) * 2.0) < max_conf]
+        return trades.loc[(np.abs(0.5 - trades['pred'].values) * 2.0) <= max_conf]
     else:
-        return trades.loc[((np.abs(0.5-trades['pred'].values)*2.0) > min_conf) & ((np.abs(0.5 - trades['pred'].values) * 2.0) < max_conf)]
+        return trades.loc[((np.abs(0.5-trades['pred'].values)*2.0) >= min_conf) & ((np.abs(0.5 - trades['pred'].values) * 2.0) <= max_conf)]
 
 
 #####################
 # STRATEGIES
 #####################
 
-def train_classifier(clf_class, data, **kwargs):
-    print('Training', clf_class.__name__.split('.')[-1], '...', end=' ')
-    try:
-        clf = clf_class(random_state=reseed(), **kwargs)
-    except:
-        clf = clf_class(**kwargs)
-    N_TRAIN = int(data.shape[0] * train_set_end)
-    df = data.iloc[0:N_TRAIN]
-    X, y = get_clean_Xy(df)
-    try:
-        clf.fit(X, y)
-    except:
-        clf = LogisticRegression()
-        clf.fit(X, y)
-    print('Done.')
-    return clf
-
 
 def optimize_model(model, model_name, space, X_train, y_train, max_evals=120):
     def objective(params):
         model.set_params(**params)
-        return -np.mean(cross_val_score(model, X_train, y_train, cv=8, scoring="accuracy"))
+        try:
+            score = -np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
+        except:
+            score = 99999.0
+        return score
 
     best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=max_evals)
     return best
 
 
-def train_hpo_ensemble(data, ensemble_type='bag'):
+def train_hpo_ensemble(data):
     print('Training..')
 
     N_TRAIN = int(data.shape[0] * train_set_end)
@@ -220,8 +208,11 @@ def train_hpo_ensemble(data, ensemble_type='bag'):
 
     # Define classifiers and hyperparameter search spaces
     classifiers = [
-        ("lr", LogisticRegression(), {"C": hp.loguniform("C", -5, 2)},
-         50),
+        ("lr", LogisticRegression(), {"C": hp.loguniform("C", -5, 2),
+                                      "max_iter": hp.choice("max_iter", range(5, 501)),
+                                      "dual": hp.choice("dual", [True, False]),
+                                      "fit_intercept": hp.choice("fit_intercept", [True, False])},
+         150),
         ("knn", KNeighborsClassifier(), {"n_neighbors": hp.choice("n_neighbors", range(2, 101))},
          50),
         ("dt", DecisionTreeClassifier(), {"max_depth": hp.choice("max_depth", range(2, 21))},
@@ -251,15 +242,15 @@ def train_hpo_ensemble(data, ensemble_type='bag'):
 
     for name, model, space, max_evals in classifiers:
         print(f"Optimizing {name}...")
-        default_score = np.mean(cross_val_score(model, X_train, y_train, cv=8, scoring="accuracy"))
+        default_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
         best_hyperparams = optimize_model(model, name, space, X_train, y_train, max_evals=max_evals)
         mp = model.get_params()
         try:
             model.set_params(**best_hyperparams)
-            optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=8, scoring="accuracy"))
+            optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
         except:
             model.set_params(**mp)
-            optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=8, scoring="accuracy"))
+            optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
             best_hyperparams = mp
         print(
             f"{name}: Default score = {default_score:.4f}, Optimized score = {optimized_score:.4f}, Best hyperparameters = {best_hyperparams}")
@@ -268,7 +259,7 @@ def train_hpo_ensemble(data, ensemble_type='bag'):
     ensemble = VotingClassifier(optimized_classifiers, voting="soft")
     # Train ensemble on training data
     ensemble.fit(X_train, y_train)
-    print('Ensemble trained.')
+    print(f'Ensemble trained. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
 
     return ensemble
 
@@ -291,8 +282,27 @@ def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_feat
                                  oob_score=True, random_state=reseed(), n_jobs=-1)
     # Train ensemble on training data
     ensemble.fit(X_train, y_train)
-    print('Done.')
+    print(f'Done. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
     return ensemble
+
+
+def train_classifier(clf_class, data, **kwargs):
+    print('Training', clf_class.__name__.split('.')[-1], '...', end=' ')
+    try:
+        clf = clf_class(random_state=reseed(), **kwargs)
+    except:
+        clf = clf_class(**kwargs)
+    N_TRAIN = int(data.shape[0] * train_set_end)
+    df = data.iloc[0:N_TRAIN]
+    X, y = get_clean_Xy(df)
+    try:
+        clf.fit(X, y)
+    except:
+        clf = LogisticRegression()
+        clf.fit(X, y)
+    print(f'Done. Mean CV score: {np.mean(cross_val_score(clf, X, y, cv=cv_folds, scoring="accuracy")):.5f}')
+    return clf
+
 
 
 class MLClassifierStrategy:
@@ -343,7 +353,7 @@ market_start_time = pd.Timestamp("09:30:00").time()
 market_end_time = pd.Timestamp("16:00:00").time()
 
 
-def backtest_ml_strategy(strategy, data, skip_train=True, skip_val=False, skip_test=True,
+def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
                          commission=0.0, slippage=0.0, position_value=100000):
     equity_curve = np.zeros(len(data))
     trades = []
@@ -400,10 +410,11 @@ def qbacktest(clf, data, quiet=0, **kwargs):
     s = MLClassifierStrategy(clf, list(data.filter(like='X')))
     equity, pf, trades = backtest_ml_strategy(s, data, **kwargs)
     if not quiet:
-        plt.plot(equity);
+        winners = (len(trades.loc[ trades['profit'].values >= 0.0]) / len(trades)) * 100.0
+        plt.plot(equity)
         plt.xlabel('Bar #')
         plt.ylabel('Profit')
-        print(f'Profit factor: {pf}, trades: {len(trades)}')
+        print(f'Profit factor: {pf:.5f}, Winners: {winners:.2f}%, Trades: {len(trades)}')
     return equity, pf, trades
 
 
