@@ -14,7 +14,6 @@ import time as stime
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from backtesting import Strategy
 from matplotlib.dates import date2num
 from matplotlib.pyplot import gca
 from matplotlib.pyplot import plot
