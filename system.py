@@ -749,9 +749,7 @@ def get_X(data):
 
 def get_y(data):
     """ Return dependent variable y """
-    y = data.Open.pct_change(1)
-    y[y >= 0] = 1
-    y[y < 0] = 0
+    y = ((data.Close.shift(-1) - data.Open.shift(-1)) >= 0).astype(np.float32)
     return y
 
 
