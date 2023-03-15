@@ -111,12 +111,12 @@ def procdata(ddd,
     def addx(x):
         global data, didx, dindex
         if len(x.shape) > 1:
-            dx = x.rename(lambda k: 'X' + uchar + k, axis=1)
+            dx = x.rename(lambda k: 'X' + uchar + k.lower(), axis=1)
             data = pd.concat([data, dx], axis=1)
             data.index = dindex
         else:
             didx += 1
-            data['X' + uchar + str(didx)] = x
+            data['X' + uchar + 'feat_' + str(didx).lower()] = x
             data.index = dindex
 
     # Retrieves a pre-defined feature configuration file to extract all available features
@@ -316,7 +316,7 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
             data.index = dindex
         else:
             didx += 1
-            data['X' + uchar + str(didx).lower()] = x
+            data['X' + uchar + 'feat_' + str(didx).lower()] = x
             data.index = dindex
 
     open_ = data.open
