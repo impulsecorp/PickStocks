@@ -334,7 +334,7 @@ class MLClassifierStrategy:
 
         # the current row is data[idx]
         # extract features for the previous row
-        features = self.datafeats[idx - 1].reshape(1, -1)
+        features = self.datafeats[idx].reshape(1, -1)
         
         # get the classifier prediction
         try:

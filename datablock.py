@@ -133,11 +133,11 @@ def procdata(ddd,
         d = pd.DataFrame(dw, columns=cs, index=data.index)
         data = pd.concat([data, d], axis=1)
 
-    open_ = data.open
-    high = data.high
-    low = data.low
-    close = data.close
-    if not use_forex: volume = data.volume
+    open_ = data.open.shift(1)
+    high = data.high.shift(1)
+    low = data.low.shift(1)
+    close = data.close.shift(1)
+    if not use_forex: volume = data.volume.shift(1)
 
     if not use_forex:
         data = data.rename({'open': 'X'+uchar+'Open',
@@ -319,11 +319,11 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
             data['X' + uchar + 'feat_' + str(didx).lower()] = x
             data.index = dindex
 
-    open_ = data.open
-    high = data.high
-    low = data.low
-    close = data.close
-    if not use_forex: volume = data.volume
+    open_ = data.open.shift(1)
+    high = data.high.shift(1)
+    low = data.low.shift(1)
+    close = data.close.shift(1)
+    if not use_forex: volume = data.volume.shift(1)
 
     if not use_forex:
         data = data.rename({'open': 'X'+uchar+'Open',
