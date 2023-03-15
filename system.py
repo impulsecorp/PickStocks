@@ -342,6 +342,7 @@ class MLClassifierStrategy:
             try:
                 prediction = self.clf.predict_proba(features)[0, 1]
             except:
+                # AutoGluon prediction fix
                 prediction = self.clf.predict_proba(pd.DataFrame(features)).values[0, 1]
 
         except NameError:
@@ -364,7 +365,7 @@ market_end_time = pd.Timestamp("16:00:00").time()
 def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
                          commission=0.0, slippage=0.0, position_value=100000):
     equity_curve = np.zeros(len(data))
-    atrades = []
+    trades = []
     current_profit = 0
 
     for idx in tqdm(range(1, len(data))):
@@ -399,7 +400,7 @@ def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
         current_profit += profit
         equity_curve[idx] = current_profit
         if action != 'none':
-            atrades.append({
+            trades.append({
                 'pos': action,
                 'pred': prediction,
                 'shares': shares,
@@ -412,7 +413,7 @@ def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
                 'profit': profit
             })
 
-    return equity_curve, *compute_stats(data, atrades)
+    return equity_curve, *compute_stats(data, trades)
 
 
 def get_winner_pct(trades):
