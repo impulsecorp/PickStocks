@@ -5,7 +5,4 @@ gym
 tqdm
 scikit-learn
 matplotlib
-backtesting
 hyperopt
-bokeh
-panel

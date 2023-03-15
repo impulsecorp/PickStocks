@@ -1,13 +1,13 @@
 import datetime
 import os
 
-os.environ['BOKEH_RESOURCES'] = 'inline'
-import bokeh.util.warnings
+# os.environ['BOKEH_RESOURCES'] = 'inline'
+# import bokeh.util.warnings
 import warnings
 
 warnings.filterwarnings('ignore')
-warnings.filterwarnings('ignore', category=bokeh.util.warnings.BokehDeprecationWarning, module='bokeh')
-warnings.filterwarnings('ignore', category=bokeh.util.warnings.BokehUserWarning, module='bokeh')
+# warnings.filterwarnings('ignore', category=bokeh.util.warnings.BokehDeprecationWarning, module='bokeh')
+# warnings.filterwarnings('ignore', category=bokeh.util.warnings.BokehUserWarning, module='bokeh')
 import random as rnd
 import time as stime
 
@@ -22,6 +22,23 @@ from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
 from sklearn.linear_model import LogisticRegression
 from tqdm.notebook import tqdm
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.metrics import accuracy_score
+from sklearn.ensemble import VotingClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.naive_bayes import GaussianNB
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+from catboost import CatBoostClassifier
+from hyperopt import fmin, tpe, hp
+import warnings
+warnings.filterwarnings('ignore')
 
 def reseed():
     def seed_everything(s=0):
@@ -131,7 +148,7 @@ def filter_trades_by_feature(trades, data, feature, min_value=None, max_value=No
     filtered_trades = trades.copy()
 
     # Get the relevant portion of the predictions indicator that corresponds to the trades
-    relevant_predictions = data[feature].iloc[filtered_trades['EntryBar']]
+    relevant_predictions = data[feature].iloc[filtered_trades['entry_bar']]
 
     # Add the rescaled predictions as a new column to the trades DataFrame
     if use_abs:
@@ -178,261 +195,341 @@ def train_classifier(clf_class, data):
     return clf
 
 
+def optimize_model(model, model_name, space, X_train, y_train, max_evals=120):
+    def objective(params):
+        model.set_params(**params)
+        return -np.mean(cross_val_score(model, X_train, y_train, cv=8, scoring="accuracy"))
+
+    best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=max_evals)
+    return best
 
 
 
-class MLClassifierStrategy(Strategy):
-    clf = None
-    period = None
-    min_confidence = 0.0
-    mode = 'none'  # 'opt', 'test'
+def train_hpo_ensemble(data):
+    print('Training..')
 
-    def make_inds(self):
-        self.data_timeperiod_time = timedelta(minutes=int(self.period.replace('min', '')))
-        # Plot y for inspection
-        self.I(get_y, self.data.df, name='ground truth')
-        # Prepare empty, all-NaN prediction indicator
-        self.predictions = self.I(lambda: np.repeat(np.nan, len(self.data)), name='predictions')
-        self.N_TRAIN = int(self.data.df.shape[0] * train_set_end)
-        self.N_OPTRAIN = int(self.data.df.shape[0] * val_set_end)
+    N_TRAIN = int(data.shape[0] * train_set_end)
+    df = data.iloc[0:N_TRAIN]
+    X_train, y_train = get_clean_Xy(df)
 
-    def init(self):
-        # Make indicators and other variables
-        self.make_inds()
+    # Define classifiers and hyperparameter search spaces
+    classifiers = [
+        ("lr", LogisticRegression(), {"C": hp.loguniform("C", -5, 2)},
+         50),
+        ("knn", KNeighborsClassifier(), {"n_neighbors": hp.choice("n_neighbors", range(2, 101))},
+         50),
+        ("dt", DecisionTreeClassifier(), {"max_depth": hp.choice("max_depth", range(2, 21))},
+         50),
+        ("rf", RandomForestClassifier(), {"n_estimators": hp.choice("n_estimators", range(50, 201)),
+                                          "max_depth": hp.choice("max_depth", range(2, 21))},
+         10),
+        ("gb", GradientBoostingClassifier(), {"n_estimators": hp.choice("n_estimators", range(50, 201)),
+                                              "learning_rate": hp.loguniform("learning_rate", -5, 0),
+                                              "max_depth": hp.choice("max_depth", range(2, 11))},
+         3),
+        ("xgb", XGBClassifier(use_label_encoder=False, eval_metric="logloss"),
+         {"n_estimators": hp.choice("n_estimators", range(50, 201)),
+          "learning_rate": hp.loguniform("learning_rate", -5, 0), "max_depth": hp.choice("max_depth", range(2, 11))},
+         3),
+        ("lgbm", LGBMClassifier(), {"n_estimators": hp.choice("n_estimators", range(50, 201)),
+                                    "learning_rate": hp.loguniform("learning_rate", -5, 0),
+                                    "max_depth": hp.choice("max_depth", range(2, 11))},
+         3),
+        ("catboost", CatBoostClassifier(verbose=False), {"n_estimators": hp.choice("n_estimators", range(50, 201)),
+                                                         "learning_rate": hp.loguniform("learning_rate", -5, 0),
+                                                         "max_depth": hp.choice("max_depth", range(2, 11))},
+         3),
+    ]
 
-        # Train the classifier in advance on the first N_TRAIN examples
-        if (self.mode == 'opt'):
-            df = self.data.df.iloc[0:self.N_TRAIN]
-        elif (self.mode == 'test'):
-            df = self.data.df.iloc[0:self.N_OPTRAIN]
-        elif (self.mode == 'none'):
-            df = self.data.df.iloc[0:self.N_TRAIN]
-        else:
-            df = self.data.df.iloc[0:self.N_TRAIN]
+    optimized_classifiers = []
 
-
-    def outofbounds(self):
-        # Skip the training data
-        if (self.mode in ['none', 'opt']) and (len(self.data) < self.N_TRAIN):
-            self.position.close()
-            return True
-        if (self.mode == 'opt') and (len(self.data) > self.N_OPTRAIN):
-            self.position.close()
-            return True
-        if (self.mode == 'test') and not (len(self.data) > self.N_OPTRAIN):
-            self.position.close()
-            return True
-
-        # Proceed with right data. Prepare some variables
-        # Don't allow trading in aftermarket hours
-        current_time = self.data.index[-1].time()
-        current_date = self.data.index[-1].date()
-        cd = datetime.combine(current_date, current_time)
-        stcd = datetime.combine(current_date, time(9, 30))
-        encd = datetime.combine(current_date, time(16, 0))
-        if not ((cd >= (stcd - self.data_timeperiod_time)) and (cd < (encd - self.data_timeperiod_time))):
-            self.position.close()
-            return True
-
-        return False
-
-    def get_prediction(self):
-        # Forecast the next movement
-        return self.clf.predict(get_X(self.data.df.iloc[-1:]))[0]
-
-    def act(self, prediction):
-        self.predictions[-1] = prediction
-        confidence = abs(0.5 - prediction) * 2
-        if confidence > self.min_confidence:
-            # Open position
-            if prediction >= 0.5:
-                self.buy(size=.2)
-            elif prediction < 0.5:
-                self.sell(size=.2)
-
-    def next(self):
-        if not self.outofbounds():
-            self.act(self.get_prediction())
-        else:
-            self.position.close()
-
-
-class MLEnsembleStrategy(MLClassifierStrategy):
-    num_clfs = 100
-    dropout = 0.05
-
-    def init(self):
-        self.make_inds()
-
-        # Init the ensemble of classifiers
+    for name, model, space, max_evals in classifiers:
+        print(f"Optimizing {name}...")
+        default_score = np.mean(cross_val_score(model, X_train, y_train, cv=8, scoring="accuracy"))
+        best_hyperparams = optimize_model(model, name, space, X_train, y_train, max_evals=max_evals)
+        mp = model.get_params()
         try:
-            self.clfs = [self.clf_class() for _ in range(self.num_clfs)]
-        except: 
-            self.clfs = [LogisticRegression() for _ in range(self.num_clfs)]
+            model.set_params(**best_hyperparams)
+            optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=8, scoring="accuracy"))
+        except:
+            model.set_params(**mp)
+            optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=8, scoring="accuracy"))
+            best_hyperparams = mp
 
-        # Train the classifiers in advance on the first N_TRAIN examples
-        df = self.data.df.iloc[:self.N_TRAIN]
-        X, y = get_clean_Xy(df)
-        for i,clf in enumerate(self.clfs):
-            pn = rnd.sample(list(range(len(X))), int(self.dropout * len(X)))
-            Xt = X.copy()[pn]
-            yt = y.copy()[pn]
-            try:
-                clf.fit(Xt, yt)
-            except:
-                self.clfs[i] = LogisticRegression()
-                self.clfs[i].fit(Xt, yt)
+        print(
+            f"{name}: Default score = {default_score:.4f}, Optimized score = {optimized_score:.4f}, Best hyperparameters = {best_hyperparams}")
+        optimized_classifiers.append((name, model))
 
-    def get_prediction(self):
-        # Forecast the next movement
-        X = get_X(self.data.df.iloc[-1:])
-        return np.mean([clf.predict(X)[0] for clf in self.clfs])
+    # Create ensemble classifier
+    ensemble = VotingClassifier(optimized_classifiers, voting="soft")
+
+    # Train ensemble on training data
+    ensemble.fit(X_train, y_train)
+    print('Ensemble trained.')
+
+    return ensemble
 
 
-class MLSingleParamStrategy(MLClassifierStrategy):
-    feature_name = None
-    # True means it will trade only when abs(move) > threshold
-    # False means it will trade only when move > threshold
-    take_abs = False
 
+class MLClassifierStrategy:
+    def __init__(self, cllf, feature_columns: list):
+        # the sklearn classifier is already fitted to the data, we just store it here
+        self.clf = cllf
+        self.feature_columns = feature_columns
 
-class MLEnsembleParamStrategy(MLEnsembleStrategy):
-    feature_name = None
-    # True means it will trade only when abs(move) > threshold
-    # False means it will trade only when move > threshold
-    take_abs = False
+    def next(self, idx, data):
+        # the current row is data[idx]
 
+        # extract features for the current row
+        features = data[self.feature_columns].iloc[idx-1].values.reshape(1, -1)
 
-# useful for the parametric strategies
-def getv(self):
-    v = self.data.df[self.feature_name].iloc[-1:].values[0]
-    if self.take_abs: v = abs(v)
-    return v
+        # get the classifier prediction
+        prediction = self.clf.predict(features)[0]
 
-
-MLSingleParamStrategy.getv = getv
-MLEnsembleParamStrategy.getv = getv
-
-
-class MLSingleParamEqStrategy(MLSingleParamStrategy):
-    target = None
-
-    def next(self):
-        if not self.outofbounds():
-            v = self.getv()
-            if v == self.target:
-                self.act(self.get_prediction())
-            else:
-                self.position.close()
+        # predicts buy
+        if prediction >= 0.5:
+            return 'buy'
         else:
-            self.position.close()
+            return 'sell'
 
 
-class MLSingleParamTimeEqStrategy(MLSingleParamStrategy):
-    target = None
+def compute_stats(data, trades):
+    if not isinstance(trades, pd.DataFrame):
+        trades_df = pd.DataFrame(trades)
+    else:
+        trades_df = trades
+    gross_profit = trades_df[trades_df['profit'] > 0]['profit'].sum()
+    gross_loss = abs(trades_df[trades_df['profit'] < 0]['profit'].sum())
+    profit_factor = gross_profit / gross_loss if gross_loss != 0 else np.inf
+    return profit_factor, trades_df
 
-    def next(self):
-        if not self.outofbounds():
-            v = self.data.index[-1].time()
-            if v == self.target:
-                self.act(self.get_prediction())
-            else:
-                self.position.close()
+
+def backtest_ml_strategy(strategy, data, skip_train=True, skip_val=False, skip_test=True,
+                         commission=0.0, slippage=0.0, position_value=100000):
+    equity_curve = np.zeros(len(data))
+    trades = []
+    current_profit = 0
+
+    for idx in tqdm(range(1, len(data))):
+        current_time = data.index[idx].time()
+        if current_time < pd.Timestamp("09:30:00").time() or current_time > pd.Timestamp("16:00:00").time():
+            # Skip trading in pre/aftermarket hours
+            equity_curve[idx] = current_profit
+            continue
+        if (idx < int(train_set_end * len(data))) and skip_train:
+            continue
+        if (idx < int(val_set_end * len(data))) and skip_val:
+            continue
+        if (idx > int(val_set_end * len(data))) and skip_test:
+            continue
+
+        action = strategy.next(idx, data)
+
+        entry_price = data.iloc[idx]['Open']
+        exit_price = data.iloc[idx]['Close']
+
+        shares = int(position_value / entry_price)
+
+        if action == 'buy':
+            profit = (exit_price - entry_price - slippage) * shares - commission
+        elif action == 'sell':
+            profit = (entry_price - exit_price - slippage) * shares - commission
         else:
-            self.position.close()
+            raise ValueError(f"Invalid action '{action}' at index {idx}")
 
+        current_profit += profit
+        equity_curve[idx] = current_profit
+        trades.append({
+            'pos': action,
+            'shares': shares,
+            'entry_datetime': data.index[idx],
+            'exit_datetime': data.index[idx],
+            'entry_bar': idx,
+            'exit_bar': idx,
+            'entry_price': entry_price,
+            'exit_price': exit_price,
+            'profit': profit
+        })
 
-class MLSingleParamOverUnderStrategy(MLSingleParamStrategy):
-    threshold = None
-    direction = 'above'  # or below
+    return equity_curve, *compute_stats(data, trades)
 
-    def next(self):
-        if not self.outofbounds():
-            v = self.getv()
-            if ((self.direction == 'above') or (self.direction == 1)) and (v > self.threshold):
-                self.act(self.get_prediction())
-            elif ((self.direction == 'below') or (self.direction == -1)) and (v < self.threshold):
-                self.act(self.get_prediction())
-            else:
-                self.position.close()
-        else:
-            self.position.close()
-
-
-class MLEnsembleParamEqStrategy(MLEnsembleParamStrategy):
-    target = None
-
-    def next(self):
-        if not self.outofbounds():
-            v = self.getv()
-            if v == self.target:
-                self.act(self.get_prediction())
-            else:
-                self.position.close()
-        else:
-            self.position.close()
-
-
-class MLEnsembleParamTimeEqStrategy(MLEnsembleParamStrategy):
-    target = None
-
-    def next(self):
-        if not self.outofbounds():
-            v = self.data.index[-1].time()
-            if v == self.target:
-                self.act(self.get_prediction())
-            else:
-                self.position.close()
-        else:
-            self.position.close()
-
-
-class MLEnsembleParamOverUnderStrategy(MLEnsembleParamStrategy):
-    threshold = None
-    direction = 'above'  # or below
-
-    def next(self):
-        if not self.outofbounds():
-            v = self.getv()
-            if ((self.direction == 'above') or (self.direction == 1)) and (v > self.threshold):
-                self.act(self.get_prediction())
-            elif ((self.direction == 'below') or (self.direction == -1)) and (v < self.threshold):
-                self.act(self.get_prediction())
-            else:
-                self.position.close()
-        else:
-            self.position.close()
-
-
-class MLSingleMultiParamStrategy(MLClassifierStrategy):
-    feature_names = None
-    take_abs = None
-
-
-def getmv(self):
-    # get all feature names
-    fnames = sorted([x for x in dir(self) if (x[0:3]=='X__')])
-    vs = []
-    for i, feature_name in enumerate(fnames):
-        v = self.data.df[feature_name.replace('_target_134','')].iloc[-1:].values[0]
-        # if self.take_abs[i]: v = abs(v)
-        vs.append(v)
-    return vs
-
-MLSingleMultiParamStrategy.getmv = getmv
-
-class MLSingleMultiParamEqStrategy(MLSingleMultiParamStrategy):
-    def next(self):
-        targets = sorted([x for x in dir(self) if (x[0:3] == 'X__')])
-
-        if not self.outofbounds():
-            vs = self.getmv()
-            if any([(x == getattr(self, y)) for x,y in zip(vs, targets)]):
-                self.act(self.get_prediction())
-            else:
-                self.position.close()
-        else:
-            self.position.close()
+#
+# class MLEnsembleStrategy(MLClassifierStrategy):
+#     num_clfs = 100
+#     dropout = 0.05
+#
+#     def init(self):
+#         self.make_inds()
+#
+#         # Init the ensemble of classifiers
+#         try:
+#             self.clfs = [self.clf_class() for _ in range(self.num_clfs)]
+#         except:
+#             self.clfs = [LogisticRegression() for _ in range(self.num_clfs)]
+#
+#         # Train the classifiers in advance on the first N_TRAIN examples
+#         df = self.data.df.iloc[:self.N_TRAIN]
+#         X, y = get_clean_Xy(df)
+#         for i,clf in enumerate(self.clfs):
+#             pn = rnd.sample(list(range(len(X))), int(self.dropout * len(X)))
+#             Xt = X.copy()[pn]
+#             yt = y.copy()[pn]
+#             try:
+#                 clf.fit(Xt, yt)
+#             except:
+#                 self.clfs[i] = LogisticRegression()
+#                 self.clfs[i].fit(Xt, yt)
+#
+#     def get_prediction(self):
+#         # Forecast the next movement
+#         X = get_X(self.data.df.iloc[-1:])
+#         return np.mean([clf.predict(X)[0] for clf in self.clfs])
+#
+#
+# class MLSingleParamStrategy(MLClassifierStrategy):
+#     feature_name = None
+#     # True means it will trade only when abs(move) > threshold
+#     # False means it will trade only when move > threshold
+#     take_abs = False
+#
+#
+# class MLEnsembleParamStrategy(MLEnsembleStrategy):
+#     feature_name = None
+#     # True means it will trade only when abs(move) > threshold
+#     # False means it will trade only when move > threshold
+#     take_abs = False
+#
+#
+# # useful for the parametric strategies
+# def getv(self):
+#     v = self.data.df[self.feature_name].iloc[-1:].values[0]
+#     if self.take_abs: v = abs(v)
+#     return v
+#
+#
+# MLSingleParamStrategy.getv = getv
+# MLEnsembleParamStrategy.getv = getv
+#
+#
+# class MLSingleParamEqStrategy(MLSingleParamStrategy):
+#     target = None
+#
+#     def next(self):
+#         if not self.outofbounds():
+#             v = self.getv()
+#             if v == self.target:
+#                 self.act(self.get_prediction())
+#             else:
+#                 self.position.close()
+#         else:
+#             self.position.close()
+#
+#
+# class MLSingleParamTimeEqStrategy(MLSingleParamStrategy):
+#     target = None
+#
+#     def next(self):
+#         if not self.outofbounds():
+#             v = self.data.index[-1].time()
+#             if v == self.target:
+#                 self.act(self.get_prediction())
+#             else:
+#                 self.position.close()
+#         else:
+#             self.position.close()
+#
+#
+# class MLSingleParamOverUnderStrategy(MLSingleParamStrategy):
+#     threshold = None
+#     direction = 'above'  # or below
+#
+#     def next(self):
+#         if not self.outofbounds():
+#             v = self.getv()
+#             if ((self.direction == 'above') or (self.direction == 1)) and (v > self.threshold):
+#                 self.act(self.get_prediction())
+#             elif ((self.direction == 'below') or (self.direction == -1)) and (v < self.threshold):
+#                 self.act(self.get_prediction())
+#             else:
+#                 self.position.close()
+#         else:
+#             self.position.close()
+#
+#
+# class MLEnsembleParamEqStrategy(MLEnsembleParamStrategy):
+#     target = None
+#
+#     def next(self):
+#         if not self.outofbounds():
+#             v = self.getv()
+#             if v == self.target:
+#                 self.act(self.get_prediction())
+#             else:
+#                 self.position.close()
+#         else:
+#             self.position.close()
+#
+#
+# class MLEnsembleParamTimeEqStrategy(MLEnsembleParamStrategy):
+#     target = None
+#
+#     def next(self):
+#         if not self.outofbounds():
+#             v = self.data.index[-1].time()
+#             if v == self.target:
+#                 self.act(self.get_prediction())
+#             else:
+#                 self.position.close()
+#         else:
+#             self.position.close()
+#
+#
+# class MLEnsembleParamOverUnderStrategy(MLEnsembleParamStrategy):
+#     threshold = None
+#     direction = 'above'  # or below
+#
+#     def next(self):
+#         if not self.outofbounds():
+#             v = self.getv()
+#             if ((self.direction == 'above') or (self.direction == 1)) and (v > self.threshold):
+#                 self.act(self.get_prediction())
+#             elif ((self.direction == 'below') or (self.direction == -1)) and (v < self.threshold):
+#                 self.act(self.get_prediction())
+#             else:
+#                 self.position.close()
+#         else:
+#             self.position.close()
+#
+#
+# class MLSingleMultiParamStrategy(MLClassifierStrategy):
+#     feature_names = None
+#     take_abs = None
+#
+#
+# def getmv(self):
+#     # get all feature names
+#     fnames = sorted([x for x in dir(self) if (x[0:3]=='X__')])
+#     vs = []
+#     for i, feature_name in enumerate(fnames):
+#         v = self.data.df[feature_name.replace('_target_134','')].iloc[-1:].values[0]
+#         # if self.take_abs[i]: v = abs(v)
+#         vs.append(v)
+#     return vs
+#
+# MLSingleMultiParamStrategy.getmv = getmv
+#
+# class MLSingleMultiParamEqStrategy(MLSingleMultiParamStrategy):
+#     def next(self):
+#         targets = sorted([x for x in dir(self) if (x[0:3] == 'X__')])
+#
+#         if not self.outofbounds():
+#             vs = self.getmv()
+#             if any([(x == getattr(self, y)) for x,y in zip(vs, targets)]):
+#                 self.act(self.get_prediction())
+#             else:
+#                 self.position.close()
+#         else:
+#             self.position.close()
 
 
 
