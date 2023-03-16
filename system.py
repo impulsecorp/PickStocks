@@ -25,6 +25,13 @@ from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
 from hyperopt import fmin, tpe, hp, rand
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.preprocessing import StandardScaler
 
 
 def reseed():
@@ -184,6 +191,72 @@ def filter_trades_by_confidence(the_trades, min_conf=None, max_conf=None):
     else:
         return trs.loc[((np.abs(0.5 - trs['pred'].values) * 2.0) >= min_conf) & (
                     (np.abs(0.5 - trs['pred'].values) * 2.0) <= max_conf)]
+
+
+
+
+# Define the 4-layer feed-forward neural network
+class BinaryClassifier(nn.Module):
+    def __init__(self, input_dim, hidden_dim):
+        super(BinaryClassifier, self).__init__()
+
+        self.network = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.network(x)
+
+# Define the PyTorch wrapper to behave like an sklearn classifier
+class PyTorchClassifierWrapper(BaseEstimator, ClassifierMixin):
+    def __init__(self, input_dim, hidden_dim, batch_size=32, learning_rate=1e-3, n_epochs=50, device='cpu'):
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.batch_size = batch_size
+        self.learning_rate = learning_rate
+        self.n_epochs = n_epochs
+        self.device = device
+        self.scaler = StandardScaler()
+        self.model = BinaryClassifier(input_dim, hidden_dim).to(device)
+        self.criterion = nn.BCELoss()
+        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+
+    def fit(self, X, y):
+        X = self.scaler.fit_transform(X)
+        X_train_tensor = torch.tensor(X, dtype=torch.float).to(self.device)
+        y_train_tensor = torch.tensor(y, dtype=torch.float).view(-1, 1).to(self.device)
+
+        train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
+
+        self.model.train()
+        for epoch in range(self.n_epochs):
+            if epoch % 10 == 0: print(f'Epochs: {epoch}/{self.n_epochs}')
+            for batch_x, batch_y in train_loader:
+                self.optimizer.zero_grad()
+                outputs = self.model(batch_x)
+                loss = self.criterion(outputs, batch_y)
+                loss.backward()
+                self.optimizer.step()
+        return self
+
+    def predict_proba(self, X):
+        X = self.scaler.transform(X)
+        X_test_tensor = torch.tensor(X, dtype=torch.float).to(self.device)
+
+        self.model.eval()
+        with torch.no_grad():
+            outputs = self.model(X_test_tensor).cpu().numpy()
+        return np.hstack((1 - outputs, outputs))
+
+    def predict(self, X):
+        proba = self.predict_proba(X)
+        return (proba[:, 1] > 0.5).astype(int)
 
 
 #####################
