@@ -9,3 +9,4 @@ hyperopt
 xgboost 
 catboost 
 lightgbm
+gplearn

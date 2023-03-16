@@ -32,6 +32,10 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.preprocessing import StandardScaler
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.preprocessing import StandardScaler
+from gplearn.genetic import SymbolicRegressor
+from gplearn.functions import make_function
 
 
 def reseed():
@@ -259,6 +263,69 @@ class PyTorchClassifierWrapper(BaseEstimator, ClassifierMixin):
         return (proba[:, 1] > 0.5).astype(int)
 
 
+class SymbolicRegressionClassifier(BaseEstimator, ClassifierMixin):
+    def __init__(
+        self,
+        # population_size=1000,
+        # generations=20,
+        # tournament_size=20,
+        # stopping_criteria=0.0,
+        # const_range=(-1.0, 1.0),
+        # init_depth=(2, 6),
+        # init_method="half and half",
+        # function_set=("add", "sub", "mul", "div"),
+        # metric="mean absolute error",
+        # parsimony_coefficient=0.001,
+        # p_crossover=0.9,
+        # p_subtree_mutation=0.01,
+        # p_hoist_mutation=0.01,
+        # p_point_mutation=0.01,
+        # p_point_replace=0.05,
+        # max_samples=1.0,
+        # feature_names=None,
+        # warm_start=False,
+        # low_memory=False,
+        # n_jobs=1,
+        # verbose=0,
+        # random_state=None
+    ):
+        self.scaler = StandardScaler()
+        self.model = SymbolicRegressor(
+            # population_size=population_size,
+            # generations=generations,
+            # tournament_size=tournament_size,
+            # stopping_criteria=stopping_criteria,
+            # const_range=const_range,
+            # init_depth=init_depth,
+            # init_method=init_method,
+            # function_set=function_set,
+            # metric=metric,
+            # parsimony_coefficient=parsimony_coefficient,
+            # p_crossover=p_crossover,
+            # p_subtree_mutation=p_subtree_mutation,
+            # p_hoist_mutation=p_hoist_mutation,
+            # p_point_mutation=p_point_mutation,
+            # p_point_replace=p_point_replace,
+            # max_samples=max_samples,
+            # feature_names=feature_names,
+            # warm_start=warm_start,
+            # low_memory=low_memory,
+            # n_jobs=n_jobs,
+            # verbose=verbose,
+            # random_state=random_state
+        )
+
+    def fit(self, X, y):
+        X = self.scaler.fit_transform(X)
+        self.model.fit(X, y)
+        return self
+
+    def predict(self, X):
+        X = self.scaler.transform(X)
+        y_pred = self.model.predict(X)
+        return (y_pred > 0.5).astype(int)
+
+
 #####################
 # STRATEGIES
 #####################
@@ -418,8 +485,11 @@ class MLClassifierStrategy:
                 # AutoGluon prediction fix
                 prediction = self.clf.predict_proba(pd.DataFrame(features)).values[0, 1]
 
-        except NameError:
-            prediction = self.clf.predict(data[self.feature_columns].iloc[idx])[0]
+        except AttributeError:
+            try:
+                prediction = self.clf.predict(data[self.feature_columns].iloc[idx])[0]
+            except:
+                prediction = self.clf.predict(data[self.feature_columns].iloc[idx].values.reshape(1, -1))[0]
 
         conf = np.abs(0.5 - prediction) * 2.0
         if conf > self.min_confidence:
