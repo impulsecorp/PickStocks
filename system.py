@@ -364,6 +364,8 @@ def train_hpo_ensemble(data):
     N_TRAIN = int(data.shape[0] * train_set_end)
     df = data.iloc[0:N_TRAIN]
     X_train, y_train = get_clean_Xy(df)
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
 
     # Define classifiers and hyperparameter search spaces
     classifiers = [
@@ -423,7 +425,7 @@ def train_hpo_ensemble(data):
     print(
         f'Ensemble trained. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
 
-    return ensemble
+    return ensemble, scaler
 
 
 def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_features=0.8, **kwargs):
@@ -438,6 +440,8 @@ def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_feat
     N_TRAIN = int(data.shape[0] * train_set_end)
     df = data.iloc[0:N_TRAIN]
     X_train, y_train = get_clean_Xy(df)
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
     # Create ensemble classifier
     ensemble = BaggingClassifier(estimator=clf, n_estimators=ensemble_size,
                                  max_samples=max_samples, max_features=max_features,
@@ -446,7 +450,7 @@ def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_feat
     ensemble.fit(X_train, y_train)
     print(
         f'Done. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
-    return ensemble
+    return ensemble, scaler
 
 
 def train_classifier(clf_class, data, **kwargs):
@@ -457,17 +461,20 @@ def train_classifier(clf_class, data, **kwargs):
     N_TRAIN = int(data.shape[0] * train_set_end)
     df = data.iloc[0:N_TRAIN]
     X, y = get_clean_Xy(df)
-    clf.fit(X, y)
-    print(f'Done. Mean CV score: {np.mean(cross_val_score(clf, X, y, cv=cv_folds, scoring="accuracy")):.5f}')
-    return clf
+    scaler = StandardScaler()
+    Xt = scaler.fit_transform(X)
+    clf.fit(Xt, y)
+    print(f'Done. Mean CV score: {np.mean(cross_val_score(clf, Xt, y, cv=cv_folds, scoring="accuracy")):.5f}')
+    return clf, scaler
 
 
 class MLClassifierStrategy:
-    def __init__(self, cllf, feature_columns: list, min_confidence=0.0):
+    def __init__(self, cllf, feature_columns, scaler, min_confidence=0.0):
         # the sklearn classifier is already fitted to the data, we just store it here
         self.clf = cllf
         self.feature_columns = feature_columns
         self.min_confidence = min_confidence
+        self.scaler = scaler
 
     def next(self, idx, data):
         if not hasattr(self, 'datafeats'):
@@ -475,7 +482,7 @@ class MLClassifierStrategy:
 
         # the current row is data[idx]
         # extract features for the previous row
-        features = self.datafeats[idx].reshape(1, -1)
+        features = self.scaler.transform(self.datafeats[idx].reshape(1, -1))
         
         # get the classifier prediction
         try:
@@ -588,8 +595,8 @@ def compute_stats(data, trades):
                                          'exit_bar', 'entry_price', 'exit_price', 'profit'])
 
 
-def qbacktest(clf, data, quiet=0, **kwargs):
-    s = MLClassifierStrategy(clf, list(data.filter(like='X')))
+def qbacktest(clf, scaler, data, quiet=0, **kwargs):
+    s = MLClassifierStrategy(clf, list(data.filter(like='X')), scaler)
     equity, pf, ktrades = backtest_ml_strategy(s, data, **kwargs)
     if not quiet:
         plt.plot(equity)
