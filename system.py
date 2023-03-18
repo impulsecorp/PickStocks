@@ -36,6 +36,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.preprocessing import StandardScaler
 from gplearn.genetic import SymbolicRegressor
 from gplearn.functions import make_function
+from imblearn.over_sampling import SMOTE
 
 
 def reseed():
@@ -67,12 +68,9 @@ from datetime import datetime, time
 
 train_set_end = 0.4  # percentage point specifying the training set end point (1.0 means all data is training set)
 val_set_end = 0.7  # percentage point specifying the validation set end point (1.0 means no test set and all data after the previous point is validation )
-# basically this is the data with the values above, which are like sliders determining the layout
-# [|0.0| ......... train .......... |0.4| ............ val ............ |0.7| .............. test ............... |1.0|]
-
 max_tries = 0.2  # for optimization, percentage of the grid space to cover (1.0 = exchaustive search)
-
 cv_folds = 5
+balance_data = 1
 
 
 # the objective function to maximize during optimization
@@ -366,6 +364,10 @@ def train_hpo_ensemble(data):
     X_train, y_train = get_clean_Xy(df)
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
+    if balance_data:
+        # Apply SMOTE oversampling to balance the training data
+        sm = SMOTE(random_state=newseed())
+        X_train, y_train = sm.fit_resample(X_train, y_train)
 
     # Define classifiers and hyperparameter search spaces
     classifiers = [
@@ -412,8 +414,11 @@ def train_hpo_ensemble(data):
             optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
         except:
             print('Problematic config found, reverting to default parameters.')
-            model.set_params(**def_params)
-            optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
+            try:
+                model.set_params(**def_params)
+                optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
+            except:
+                pass
             best_hyperparams = def_params
         print(
             f"{name}: Default score = {default_score:.4f}, Optimized score = {optimized_score:.4f}, Best hyperparameters = {best_hyperparams}")
@@ -442,6 +447,10 @@ def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_feat
     X_train, y_train = get_clean_Xy(df)
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
+    if balance_data:
+        # Apply SMOTE oversampling to balance the training data
+        sm = SMOTE(random_state=newseed())
+        X_train, y_train = sm.fit_resample(X_train, y_train)
     # Create ensemble classifier
     ensemble = BaggingClassifier(estimator=clf, n_estimators=ensemble_size,
                                  max_samples=max_samples, max_features=max_features,
@@ -463,6 +472,10 @@ def train_classifier(clf_class, data, **kwargs):
     X, y = get_clean_Xy(df)
     scaler = StandardScaler()
     Xt = scaler.fit_transform(X)
+    if balance_data:
+        # Apply SMOTE oversampling to balance the training data
+        sm = SMOTE(random_state=newseed())
+        Xt, y = sm.fit_resample(Xt, y)
     clf.fit(Xt, y)
     print(f'Done. Mean CV score: {np.mean(cross_val_score(clf, Xt, y, cv=cv_folds, scoring="accuracy")):.5f}')
     return clf, scaler
