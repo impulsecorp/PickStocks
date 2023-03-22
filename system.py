@@ -37,6 +37,7 @@ from sklearn.preprocessing import StandardScaler
 from gplearn.genetic import SymbolicRegressor
 from gplearn.functions import make_function
 from imblearn.over_sampling import SMOTE
+import pickle as pkl
 
 
 def reseed():

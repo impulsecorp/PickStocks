@@ -40,25 +40,27 @@ def compute_custom_features(close, data, high, low, open_, uchar):
     data['X' + uchar + 'last_move'] = b
     b = high.shift(1).values - low.shift(1).values
     data['X' + uchar + 'last_span'] = b
+
     # times in row
     # Calculate the "X times in row" indicator
     x_in_row = []
     count = 0
     last_move = 0
     last_date = None
-    for i, move in enumerate(data['X' + uchar + 'last_move']):
-        date = dates[i]
-        if date != last_date:
-            count = 0
+    for i, move in enumerate(data['X' + uchar + 'last_move'].values):
         if move * last_move > 0 and move != 0:
             count += 1
         else:
+            count = 0
+        date = dates[i]
+        if date != last_date:
             count = 0
         x_in_row.append(count)
         last_date = date
         last_move = move
     # Add the "X times in row" column to the DataFrame
     data['X' + uchar + 'times_in_row'] = x_in_row
+
 
     def mlag(n=1):
         b = open_.values[n:] - open_.values[0:-n]
@@ -101,6 +103,9 @@ def procdata(ddd,
              use_forex=False, double_underscore=True,
              cut_first_N=-1): 
     global data, dindex
+
+    ddd = ddd.between_time('09:30', '16:00')
+
     data = ddd
     dindex = ddd.index
 
@@ -284,7 +289,6 @@ def procdata(ddd,
     # cut off the first N rows, because they are likely nans
     if cut_first_N > 0: data = data[cut_first_N:]
 
-    data = data.between_time('09:30', '16:00')
     data = data.rename({'X__Open': 'Open',
                         'X__High': 'High',
                         'X__Low': 'Low',
@@ -301,6 +305,9 @@ def procdata(ddd,
 
 def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
     global data, dindex
+
+    ddd = ddd.between_time('09:30', '16:00')
+
     data = ddd
     dindex = ddd.index
 
