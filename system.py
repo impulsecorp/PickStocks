@@ -534,10 +534,11 @@ def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
 
     for idx in tqdm(range(1, len(data))):
         current_time = data.index[idx].time()
-        if (current_time < market_start_time) or (current_time > market_end_time):
-            # Skip trading in pre/aftermarket hours
-            equity_curve[idx] = current_profit
-            continue
+        if not data.daily:
+            if (current_time < market_start_time) or (current_time > market_end_time):
+                # Skip trading in pre/aftermarket hours
+                equity_curve[idx] = current_profit
+                continue
         if (idx < int(train_set_end * len(data))) and skip_train:
             continue
         if (idx < int(val_set_end * len(data))) and skip_val:
@@ -679,8 +680,10 @@ def get_data(symbol, period='D', nrows=None):
     sfn = symbol + '_' + period
     if period != 'D':
         data = pd.read_csv(datadir + '/' + sfn + '.csv', nrows=nrows, parse_dates=['time'], index_col=0)
+        data.daily = 0
     else:
         data = pd.read_csv(datadir + '/' + sfn + '.csv', nrows=nrows, parse_dates=['date'], index_col=0)
+        data.daily = 1
     print('Done.')
     return data
 
@@ -691,8 +694,10 @@ def get_data_proc(symbol, period='D', nrows=None):
     sfn = symbol + '_' + period
     if period != 'D':
         data = pd.read_csv(datadir + '/' + sfn + '_proc.csv', nrows=nrows, parse_dates=['time'], index_col=0)
+        data.daily = 0
     else:
         data = pd.read_csv(datadir + '/' + sfn + '_proc.csv', nrows=nrows, parse_dates=['date'], index_col=0)
+        data.daily = 1
     print('Done.')
     return data
 

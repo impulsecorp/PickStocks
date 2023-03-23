@@ -5,10 +5,10 @@ from tqdm.notebook import tqdm
 import pandas_ta as ta
 from system import make_dataset, get_data, shuffle_split, make_synth_data
 
-def compute_custom_features(close, data, high, low, open_, uchar, daily=0):
+def compute_custom_features(data, open_, high, low, close, uchar):
     # Some datetime features for good measure
     data['X' + uchar + 'day'] = data.index.dayofweek
-    if not daily:
+    if not data.daily:
         data['X' + uchar + 'hour'] = data.index.hour
     # Additional custom features
     # Convert the index to datetime and create a temporary date variable
@@ -54,7 +54,7 @@ def compute_custom_features(close, data, high, low, open_, uchar, daily=0):
         else:
             count = 0
         date = dates[i]
-        if not daily:
+        if not data.daily:
             if date != last_date:
                 count = 0
         x_in_row.append(count)
@@ -103,11 +103,10 @@ dindex = None
 def procdata(ddd, 
              use_tsfel=True, dwinlen=60,
              use_forex=False, double_underscore=True,
-             cut_first_N=-1,
-             daily=0):
+             cut_first_N=-1):
     global data, dindex
 
-    if not daily:
+    if not ddd.daily:
         ddd = ddd.between_time('09:30', '16:00')
 
     data = ddd
@@ -127,6 +126,7 @@ def procdata(ddd,
             didx += 1
             data['X' + uchar + 'feat_' + str(didx).lower()] = x
             data.index = dindex
+        data.daily = ddd.daily
 
     # Retrieves a pre-defined feature configuration file to extract all available features
     if use_tsfel:
@@ -285,7 +285,7 @@ def procdata(ddd,
         addx(ta.zlma(close, length=None, mamode=None, offset=None))
         addx(ta.zscore(close, length=None, std=None, offset=None))
 
-    compute_custom_features(close, data, high, low, open_, uchar, daily=daily)
+    compute_custom_features(data, open_, high, low, close, uchar)
 
     data.replace([np.inf, -np.inf], np.nan, inplace=True)
     data = data.fillna(0).astype(float)
@@ -299,6 +299,7 @@ def procdata(ddd,
                         'X__Close': 'Close',
                         'X__Volume': 'Volume',
                         }, axis=1)
+    data.daily = ddd.daily
     print('Done.')
     return data
 
@@ -307,10 +308,10 @@ def procdata(ddd,
 
 
 
-def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1, daily=0):
+def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
     global data, dindex
 
-    if not daily:
+    if not ddd.daily:
         ddd = ddd.between_time('09:30', '16:00')
 
     data = ddd
@@ -330,6 +331,7 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1, 
             didx += 1
             data['X' + uchar + 'feat_' + str(didx).lower()] = x
             data.index = dindex
+        data.daily = ddd.daily
 
     open_ = data.open.shift(1)
     high = data.high.shift(1)
@@ -374,7 +376,7 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1, 
         addx(ta.supertrend(high, low, close, length=None, multiplier=None, offset=None))   
         addx(ta.willr(high, low, close, length=None, offset=None))
 
-    compute_custom_features(close, data, high, low, open_, uchar, daily=daily)
+    compute_custom_features(data, open_, high, low, close, uchar)
 
     data.replace([np.inf, -np.inf], np.nan, inplace=True)
     data = data.fillna(0).astype(float)
@@ -382,13 +384,13 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1, 
     # cut off the first N rows, because they are likely nans
     if cut_first_N > 0: data = data[cut_first_N:]
 
-    data = data.between_time('09:30', '16:00')
     data = data.rename({'X__Open': 'Open',
                         'X__High': 'High',
                         'X__Low': 'Low',
                         'X__Close': 'Close',
                         'X__Volume': 'Volume',
                         }, axis=1)
+    data.daily = ddd.daily
     print('Done.')
     return data
 
