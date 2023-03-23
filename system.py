@@ -2,12 +2,12 @@ import datetime
 import os
 
 import warnings
+
 warnings.filterwarnings('ignore')
 import random as rnd
 import time as stime
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 from matplotlib.dates import date2num
 from matplotlib.pyplot import gca
@@ -16,7 +16,7 @@ from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
 from tqdm.notebook import tqdm
 from sklearn.model_selection import cross_val_score
-from sklearn.ensemble import VotingClassifier, BaggingClassifier, ExtraTreesClassifier
+from sklearn.ensemble import VotingClassifier, BaggingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
@@ -24,7 +24,7 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
-from hyperopt import fmin, tpe, hp, rand
+from hyperopt import fmin, hp, rand
 import numpy as np
 import torch
 import torch.nn as nn
@@ -32,12 +32,8 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.preprocessing import StandardScaler
-from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.preprocessing import StandardScaler
 from gplearn.genetic import SymbolicRegressor
-from gplearn.functions import make_function
 from imblearn.over_sampling import SMOTE
-import pickle as pkl
 
 
 def reseed():
@@ -52,16 +48,18 @@ def reseed():
     seed_everything(seed)
     return seed
 
+
 def newseed():
     seed = 0
     while seed == 0:
         seed = int(stime.time() * 100000) % 1000000
     return seed
 
+
 seed = reseed()
 
-pd.set_option('display.max_rows', None)
-pd.set_option('display.max_columns', None)
+# pd.set_option('display.max_rows', None)
+# pd.set_option('display.max_columns', None)
 
 from datetime import datetime, time
 
@@ -149,7 +147,8 @@ def featdeformat(s):
     return s[len('X__'):].replace('_', ' ').replace('-', ' ')
 
 
-def filter_trades_by_feature(the_trades, data, feature, min_value=None, max_value=None, exact_value=None, use_abs=False):
+def filter_trades_by_feature(the_trades, data, feature, min_value=None, max_value=None, exact_value=None,
+                             use_abs=False):
     # Create a copy of the trades DataFrame
     filtered_trades = the_trades.copy()
 
@@ -171,7 +170,7 @@ def filter_trades_by_feature(the_trades, data, feature, min_value=None, max_valu
             if min_value == max_value:
                 filtered_trades = filtered_trades.loc[ft == min_value]
             else:
-                min_value, max_value = np.min([min_value, max_value]), np.max([min_value, max_value]) 
+                min_value, max_value = np.min([min_value, max_value]), np.max([min_value, max_value])
                 filtered_trades = filtered_trades.loc[(min_value <= ft) & (ft <= max_value)]
         else:
             # open intervals
@@ -193,9 +192,71 @@ def filter_trades_by_confidence(the_trades, min_conf=None, max_conf=None):
         return trs.loc[(np.abs(0.5 - trs['pred'].values) * 2.0) <= max_conf]
     else:
         return trs.loc[((np.abs(0.5 - trs['pred'].values) * 2.0) >= min_conf) & (
-                    (np.abs(0.5 - trs['pred'].values) * 2.0) <= max_conf)]
+                (np.abs(0.5 - trs['pred'].values) * 2.0) <= max_conf)]
 
 
+class LSTMBinaryClassifier(nn.Module):
+    def __init__(self, input_dim, hidden_dim):
+        super(LSTMBinaryClassifier, self).__init__()
+
+        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, 1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        lstm_out, _ = self.lstm(x)
+        lstm_out = lstm_out[:, -1, :]  # only take the last output of the sequence
+        out = self.fc(lstm_out)
+        out = self.sigmoid(out)
+        return out
+
+
+class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
+    def __init__(self, input_dim, hidden_dim, batch_size=32, learning_rate=1e-3, n_epochs=50, device='cpu'):
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.batch_size = batch_size
+        self.learning_rate = learning_rate
+        self.n_epochs = n_epochs
+        self.device = device
+        self.scaler = StandardScaler()
+        self.model = LSTMBinaryClassifier(input_dim, hidden_dim).to(device)
+        self.criterion = nn.BCELoss()
+        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+
+    def fit(self, X, y):
+        X = self.scaler.fit_transform(X)
+        X = X.reshape(-1, 1, self.input_dim)  # reshape input data to (batch_size, sequence_length, input_dim)
+        X_train_tensor = torch.tensor(X, dtype=torch.float).to(self.device)
+        y_train_tensor = torch.tensor(y, dtype=torch.float).view(-1, 1).to(self.device)
+
+        train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
+
+        self.model.train()
+        for epoch in range(self.n_epochs):
+            if epoch % 10 == 0: print(f'Epochs: {epoch}/{self.n_epochs}')
+            for batch_x, batch_y in train_loader:
+                self.optimizer.zero_grad()
+                outputs = self.model(batch_x)
+                loss = self.criterion(outputs, batch_y)
+                loss.backward()
+                self.optimizer.step()
+        return self
+
+    def predict_proba(self, X):
+        X = self.scaler.transform(X)
+        X = X.reshape(-1, 1, self.input_dim)  # reshape input data to (batch_size, sequence_length, input_dim)
+        X_test_tensor = torch.tensor(X, dtype=torch.float).to(self.device)
+
+        self.model.eval()
+        with torch.no_grad():
+            outputs = self.model(X_test_tensor).cpu().numpy()
+        return np.hstack((1 - outputs, outputs))
+
+    def predict(self, X):
+        proba = self.predict_proba(X)
+        return (proba[:, 1] > 0.5).astype(int)
 
 
 # Define the 4-layer feed-forward neural network
@@ -214,6 +275,7 @@ class BinaryClassifier(nn.Module):
 
     def forward(self, x):
         return self.network(x)
+
 
 # Define the PyTorch wrapper to behave like an sklearn classifier
 class PyTorchClassifierWrapper(BaseEstimator, ClassifierMixin):
@@ -264,29 +326,29 @@ class PyTorchClassifierWrapper(BaseEstimator, ClassifierMixin):
 
 class SymbolicRegressionClassifier(BaseEstimator, ClassifierMixin):
     def __init__(
-        self,
-        # population_size=1000,
-        # generations=20,
-        # tournament_size=20,
-        # stopping_criteria=0.0,
-        # const_range=(-1.0, 1.0),
-        # init_depth=(2, 6),
-        # init_method="half and half",
-        # function_set=("add", "sub", "mul", "div"),
-        # metric="mean absolute error",
-        # parsimony_coefficient=0.001,
-        # p_crossover=0.9,
-        # p_subtree_mutation=0.01,
-        # p_hoist_mutation=0.01,
-        # p_point_mutation=0.01,
-        # p_point_replace=0.05,
-        # max_samples=1.0,
-        # feature_names=None,
-        # warm_start=False,
-        # low_memory=False,
-        # n_jobs=1,
-        # verbose=0,
-        # random_state=None
+            self,
+            # population_size=1000,
+            # generations=20,
+            # tournament_size=20,
+            # stopping_criteria=0.0,
+            # const_range=(-1.0, 1.0),
+            # init_depth=(2, 6),
+            # init_method="half and half",
+            # function_set=("add", "sub", "mul", "div"),
+            # metric="mean absolute error",
+            # parsimony_coefficient=0.001,
+            # p_crossover=0.9,
+            # p_subtree_mutation=0.01,
+            # p_hoist_mutation=0.01,
+            # p_point_mutation=0.01,
+            # p_point_replace=0.05,
+            # max_samples=1.0,
+            # feature_names=None,
+            # warm_start=False,
+            # low_memory=False,
+            # n_jobs=1,
+            # verbose=0,
+            # random_state=None
     ):
         self.scaler = StandardScaler()
         self.model = SymbolicRegressor(
@@ -332,6 +394,7 @@ class SymbolicRegressionClassifier(BaseEstimator, ClassifierMixin):
 
 def optimize_model(model, model_name, space, X_train, y_train, max_evals=120):
     defaults = model.get_params()
+
     def objective(params):
         try:
             model.set_params(random_state=newseed(), **params)
@@ -340,13 +403,13 @@ def optimize_model(model, model_name, space, X_train, y_train, max_evals=120):
         except:
             return 9999999.0
 
-    best = fmin(fn=objective, space=space, algo=rand.suggest, max_evals=max_evals )
-    
+    best = fmin(fn=objective, space=space, algo=rand.suggest, max_evals=max_evals)
+
     # if we can't instantiate and train the model, use the defaults
     try:
         try:
             model.set_params(random_state=newseed(), **best)
-        except: 
+        except:
             model.set_params(**best)
         model.fit(X_train[0:15], y_train[0:15])
     except:
@@ -411,7 +474,7 @@ def train_hpo_ensemble(data):
         best_hyperparams = optimize_model(model, name, space, X_train, y_train, max_evals=max_evals)
         try:
             model.set_params(**best_hyperparams)
-            model.fit( X_train, y_train )
+            model.fit(X_train, y_train)
             optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
         except:
             print('Problematic config found, reverting to default parameters.')
@@ -497,7 +560,7 @@ class MLClassifierStrategy:
         # the current row is data[idx]
         # extract features for the previous row
         features = self.scaler.transform(self.datafeats[idx].reshape(1, -1))
-        
+
         # get the classifier prediction
         try:
             try:
