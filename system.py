@@ -677,7 +677,10 @@ def get_data(symbol, period='D', nrows=None):
     print('Loading..', end=' ')
     if period == 'd': period = 'D'
     sfn = symbol + '_' + period
-    data = pd.read_csv(datadir + '/' + sfn + '.csv', nrows=nrows, parse_dates=['time'], index_col=0)
+    if period != 'D':
+        data = pd.read_csv(datadir + '/' + sfn + '.csv', nrows=nrows, parse_dates=['time'], index_col=0)
+    else:
+        data = pd.read_csv(datadir + '/' + sfn + '.csv', nrows=nrows, parse_dates=['date'], index_col=0)
     print('Done.')
     return data
 
@@ -686,7 +689,10 @@ def get_data_proc(symbol, period='D', nrows=None):
     print('Loading..', end=' ')
     if period == 'd': period = 'D'
     sfn = symbol + '_' + period
-    data = pd.read_csv(datadir + '/' + sfn + '_proc.csv', nrows=nrows, parse_dates=['time'], index_col=0)
+    if period != 'D':
+        data = pd.read_csv(datadir + '/' + sfn + '_proc.csv', nrows=nrows, parse_dates=['time'], index_col=0)
+    else:
+        data = pd.read_csv(datadir + '/' + sfn + '_proc.csv', nrows=nrows, parse_dates=['date'], index_col=0)
     print('Done.')
     return data
 
