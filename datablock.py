@@ -8,7 +8,8 @@ from system import make_dataset, get_data, shuffle_split, make_synth_data
 def compute_custom_features(close, data, high, low, open_, uchar, daily=0):
     # Some datetime features for good measure
     data['X' + uchar + 'day'] = data.index.dayofweek
-    data['X' + uchar + 'hour'] = data.index.hour
+    if not daily:
+        data['X' + uchar + 'hour'] = data.index.hour
     # Additional custom features
     # Convert the index to datetime and create a temporary date variable
     dix = pd.to_datetime(data.index)
@@ -53,8 +54,9 @@ def compute_custom_features(close, data, high, low, open_, uchar, daily=0):
         else:
             count = 0
         date = dates[i]
-        if date != last_date:
-            count = 0
+        if not daily:
+            if date != last_date:
+                count = 0
         x_in_row.append(count)
         last_date = date
         last_move = move
