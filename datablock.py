@@ -5,7 +5,7 @@ from tqdm.notebook import tqdm
 import pandas_ta as ta
 from system import make_dataset, get_data, shuffle_split, make_synth_data
 
-def compute_custom_features(close, data, high, low, open_, uchar):
+def compute_custom_features(close, data, high, low, open_, uchar, daily=0):
     # Some datetime features for good measure
     data['X' + uchar + 'day'] = data.index.dayofweek
     data['X' + uchar + 'hour'] = data.index.hour
@@ -101,10 +101,12 @@ dindex = None
 def procdata(ddd, 
              use_tsfel=True, dwinlen=60,
              use_forex=False, double_underscore=True,
-             cut_first_N=-1): 
+             cut_first_N=-1,
+             daily=0):
     global data, dindex
 
-    ddd = ddd.between_time('09:30', '16:00')
+    if not daily:
+        ddd = ddd.between_time('09:30', '16:00')
 
     data = ddd
     dindex = ddd.index
@@ -281,7 +283,7 @@ def procdata(ddd,
         addx(ta.zlma(close, length=None, mamode=None, offset=None))
         addx(ta.zscore(close, length=None, std=None, offset=None))
 
-    compute_custom_features(close, data, high, low, open_, uchar)
+    compute_custom_features(close, data, high, low, open_, uchar, daily=daily)
 
     data.replace([np.inf, -np.inf], np.nan, inplace=True)
     data = data.fillna(0).astype(float)
@@ -303,10 +305,11 @@ def procdata(ddd,
 
 
 
-def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
+def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1, daily=0):
     global data, dindex
 
-    ddd = ddd.between_time('09:30', '16:00')
+    if not daily:
+        ddd = ddd.between_time('09:30', '16:00')
 
     data = ddd
     dindex = ddd.index
@@ -369,7 +372,7 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
         addx(ta.supertrend(high, low, close, length=None, multiplier=None, offset=None))   
         addx(ta.willr(high, low, close, length=None, offset=None))
 
-    compute_custom_features(close, data, high, low, open_, uchar)
+    compute_custom_features(close, data, high, low, open_, uchar, daily=daily)
 
     data.replace([np.inf, -np.inf], np.nan, inplace=True)
     data = data.fillna(0).astype(float)
