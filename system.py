@@ -58,8 +58,8 @@ def newseed():
 
 seed = reseed()
 
-# pd.set_option('display.max_rows', None)
-# pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_columns', None)
 
 from datetime import datetime, time
 
@@ -257,6 +257,7 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
     def predict(self, X):
         proba = self.predict_proba(X)
         return (proba[:, 1] > 0.5).astype(int)
+
 
 
 # Define the 4-layer feed-forward neural network
