@@ -106,7 +106,9 @@ def procdata(ddd,
              cut_first_N=-1):
     global data, dindex
 
-    if not ddd.daily:
+    daily = ddd.daily
+
+    if not daily:
         ddd = ddd.between_time('09:30', '16:00')
 
     data = ddd
@@ -126,7 +128,7 @@ def procdata(ddd,
             didx += 1
             data['X' + uchar + 'feat_' + str(didx).lower()] = x
             data.index = dindex
-        data.daily = ddd.daily
+        data.daily = daily
 
     # Retrieves a pre-defined feature configuration file to extract all available features
     if use_tsfel:
@@ -285,6 +287,7 @@ def procdata(ddd,
         addx(ta.zlma(close, length=None, mamode=None, offset=None))
         addx(ta.zscore(close, length=None, std=None, offset=None))
 
+    data.daily = daily
     compute_custom_features(data, open_, high, low, close, uchar)
 
     data.replace([np.inf, -np.inf], np.nan, inplace=True)
@@ -299,7 +302,7 @@ def procdata(ddd,
                         'X__Close': 'Close',
                         'X__Volume': 'Volume',
                         }, axis=1)
-    data.daily = ddd.daily
+    data.daily = daily
     print('Done.')
     return data
 
@@ -311,7 +314,9 @@ def procdata(ddd,
 def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
     global data, dindex
 
-    if not ddd.daily:
+    daily = ddd.daily
+
+    if not daily:
         ddd = ddd.between_time('09:30', '16:00')
 
     data = ddd
@@ -331,7 +336,7 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
             didx += 1
             data['X' + uchar + 'feat_' + str(didx).lower()] = x
             data.index = dindex
-        data.daily = ddd.daily
+        data.daily = daily
 
     open_ = data.open.shift(1)
     high = data.high.shift(1)
@@ -376,6 +381,7 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
         addx(ta.supertrend(high, low, close, length=None, multiplier=None, offset=None))   
         addx(ta.willr(high, low, close, length=None, offset=None))
 
+    data.daily = daily
     compute_custom_features(data, open_, high, low, close, uchar)
 
     data.replace([np.inf, -np.inf], np.nan, inplace=True)
@@ -390,7 +396,7 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
                         'X__Close': 'Close',
                         'X__Volume': 'Volume',
                         }, axis=1)
-    data.daily = ddd.daily
+    data.daily = daily
     print('Done.')
     return data
 
