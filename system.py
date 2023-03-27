@@ -580,7 +580,7 @@ def train_classifier(clf_class, data, **kwargs):
         sm = SMOTE(random_state=newseed())
         Xt, y = sm.fit_resample(Xt, y)
     clf.fit(Xt, y)
-    print(f'Done. Mean CV score: {np.mean(cross_val_score(clf, Xt, y, cv=cv_folds, scoring="accuracy")):.5f}')
+    # print(f'Done. Mean CV score: {np.mean(cross_val_score(clf, Xt, y, cv=cv_folds, scoring="accuracy")):.5f}')
     return clf, scaler
 
 
