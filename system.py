@@ -261,6 +261,29 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
 
 
 # Define the 4-layer feed-forward neural network
+import torch.nn.functional as F
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class SelfAttention(nn.Module):
+    def __init__(self, hidden_dim):
+        super(SelfAttention, self).__init__()
+        self.query = nn.Linear(hidden_dim, hidden_dim)
+        self.key = nn.Linear(hidden_dim, hidden_dim)
+        self.value = nn.Linear(hidden_dim, hidden_dim)
+
+    def forward(self, x):
+        q = self.query(x)
+        k = self.key(x)
+        v = self.value(x)
+
+        attn_weights = F.softmax(torch.matmul(q, k.transpose(-2, -1)) / (x.size(-1) ** 0.5), dim=-1)
+        attn_output = torch.matmul(attn_weights, v)
+
+        return attn_output
+
 class BinaryClassifier(nn.Module):
     def __init__(self, input_dim, hidden_dim):
         super(BinaryClassifier, self).__init__()
@@ -268,14 +291,15 @@ class BinaryClassifier(nn.Module):
         self.network = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
+            SelfAttention(hidden_dim),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid()
-        )
-
+            )
     def forward(self, x):
         return self.network(x)
+
 
 
 # Define the PyTorch wrapper to behave like an sklearn classifier
@@ -302,13 +326,27 @@ class PyTorchClassifierWrapper(BaseEstimator, ClassifierMixin):
 
         self.model.train()
         for epoch in range(self.n_epochs):
-            if epoch % 10 == 0: print(f'Epochs: {epoch}/{self.n_epochs}')
+            epoch_loss = 0
+            correct = 0
+            total = 0
             for batch_x, batch_y in train_loader:
                 self.optimizer.zero_grad()
                 outputs = self.model(batch_x)
                 loss = self.criterion(outputs, batch_y)
+                epoch_loss += loss.item()
                 loss.backward()
                 self.optimizer.step()
+
+                # Compute accuracy
+                predicted = torch.round(outputs)
+                correct += (predicted == batch_y).sum().item()
+                total += batch_y.size(0)
+
+            epoch_acc = correct / total
+            epoch_loss /= len(train_loader)
+
+            print(f'Epoch {epoch} - Loss: {epoch_loss:.4f}, Accuracy: {epoch_acc:.4f}')
+
         return self
 
     def predict_proba(self, X):
