@@ -585,12 +585,13 @@ def train_classifier(clf_class, data, **kwargs):
 
 
 class MLClassifierStrategy:
-    def __init__(self, cllf, feature_columns, scaler, min_confidence=0.0):
+    def __init__(self, cllf, feature_columns, scaler, min_confidence=0.0, reverse=False):
         # the sklearn classifier is already fitted to the data, we just store it here
         self.clf = cllf
         self.feature_columns = feature_columns
         self.min_confidence = min_confidence
         self.scaler = scaler
+        self.reverse = reverse
 
     def next(self, idx, data):
         if not hasattr(self, 'datafeats'):
@@ -616,10 +617,16 @@ class MLClassifierStrategy:
 
         conf = np.abs(0.5 - prediction) * 2.0
         if conf > self.min_confidence:
-            if prediction >= 0.5:
-                return 'buy', prediction
+            if not self.reverse:
+                if prediction >= 0.5:
+                    return 'buy', prediction
+                else:
+                    return 'sell', prediction
             else:
-                return 'sell', prediction
+                if prediction >= 0.5:
+                    return 'sell', prediction
+                else:
+                    return 'buy', prediction
         else:
             return 'none', prediction
 
@@ -712,8 +719,8 @@ def compute_stats(data, trades):
                                          'exit_bar', 'entry_price', 'exit_price', 'profit'])
 
 
-def qbacktest(clf, scaler, data, quiet=0, **kwargs):
-    s = MLClassifierStrategy(clf, list(data.filter(like='X')), scaler)
+def qbacktest(clf, scaler, data, quiet=0, reverse=False, **kwargs):
+    s = MLClassifierStrategy(clf, list(data.filter(like='X')), scaler, reverse=reverse)
     equity, pf, ktrades = backtest_ml_strategy(s, data, **kwargs)
     if not quiet:
         plt.plot(equity)
