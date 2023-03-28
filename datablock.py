@@ -81,14 +81,15 @@ def compute_custom_features(data, open_, high, low, close, uchar):
     data['X' + uchar + 'overnight_direction'] = np.where(data['X' + uchar + 'overnight_move'] > 0, 1, -1)
 
     # Compute yesterday's close-to-open move
-    # yesterday_close = close.shift(1)
-    # yesterday_open = open_.shift(1)
-    #
-    # data['X' + uchar + 'yesterday_move'] = yesterday_open - yesterday_close
+    yesterday_close = close.shift(1)
+    yesterday_open = open_.shift(1)
+
+    data['X' + uchar + 'yesterday_move'] = yesterday_open - yesterday_close
 
     # Indicator 1: Overnight move in the same direction as yesterday's close-to-open move
     data['X' + uchar + 'f1'] = np.where(
-        data['X' + uchar + 'overnight_direction'].values == np.sign(data['X' + uchar + 'yesterday_move'].values), 1, 0)
+        data['X' + uchar + 'overnight_direction'].values == np.sign(data['X' + uchar + 'overnight_move'].values), 1, 0)
+
     # Indicator 2: Today's open is above yesterday's high
     data['X' + uchar + 'f2'] = np.where(open_ > high.shift(1), 1, 0)
     # Indicator 3: Today's open is below yesterday's low
