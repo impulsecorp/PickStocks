@@ -14,6 +14,7 @@ def compute_custom_features(data, open_, high, low, close, uchar):
     # Convert the index to datetime and create a temporary date variable
     dix = pd.to_datetime(data.index)
     dates = dix.date
+
     # Calculate the "overnight move" indicator
     overnight_move = []
     last_open = None
@@ -25,6 +26,7 @@ def compute_custom_features(data, open_, high, low, close, uchar):
         last_open = xopen_
         # Add the "overnight move" column to the DataFrame
     data['X' + uchar + 'overnight_move'] = overnight_move
+
     b = open_.values[1:] - open_.values[0:-1]
     b = np.hstack([np.zeros(1), b])
     data['X' + uchar + 'open_move'] = b
@@ -77,10 +79,13 @@ def compute_custom_features(data, open_, high, low, close, uchar):
 
     # Compute the overnight move direction
     data['X' + uchar + 'overnight_direction'] = np.where(data['X' + uchar + 'overnight_move'] > 0, 1, -1)
+
     # Compute yesterday's close-to-open move
-    yesterday_close = close.shift(1)
-    yesterday_open = open_.shift(1)
-    data['X' + uchar + 'yesterday_move'] = yesterday_open - yesterday_close
+    # yesterday_close = close.shift(1)
+    # yesterday_open = open_.shift(1)
+    #
+    # data['X' + uchar + 'yesterday_move'] = yesterday_open - yesterday_close
+
     # Indicator 1: Overnight move in the same direction as yesterday's close-to-open move
     data['X' + uchar + 'f1'] = np.where(
         data['X' + uchar + 'overnight_direction'].values == np.sign(data['X' + uchar + 'yesterday_move'].values), 1, 0)
