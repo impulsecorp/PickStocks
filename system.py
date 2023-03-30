@@ -70,7 +70,8 @@ val_set_end = 0.7  # percentage point specifying the validation set end point (1
 max_tries = 0.2  # for optimization, percentage of the grid space to cover (1.0 = exchaustive search)
 cv_folds = 5
 balance_data = 1
-
+multiclass = 0
+multiclass_move_threshold = 0.2
 
 # the objective function to maximize during optimization
 def objective(s):
@@ -584,10 +585,58 @@ def train_classifier(clf_class, data, **kwargs):
     return clf, scaler
 
 
+# class MLClassifierStrategy:
+#     def __init__(self, clf, feature_columns, scaler, min_confidence=0.0, reverse=False):
+#         # the sklearn classifier is already fitted to the data, we just store it here
+#         self.clf = clf
+#         self.feature_columns = feature_columns
+#         self.min_confidence = min_confidence
+#         self.scaler = scaler
+#         self.reverse = reverse
+#
+#     def next(self, idx, data):
+#         if not hasattr(self, 'datafeats'):
+#             self.datafeats = data[self.feature_columns].values
+#
+#         # the current row is data[idx]
+#         # extract features for the previous row
+#         features = self.scaler.transform(self.datafeats[idx].reshape(1, -1))
+#
+#         # get the classifier prediction
+#         try:
+#             try:
+#                 prediction = self.clf.predict_proba(features)[0, 1]
+#             except:
+#                 # AutoGluon prediction fix
+#                 prediction = self.clf.predict_proba(pd.DataFrame(features)).values[0, 1]
+#
+#         except AttributeError:
+#             try:
+#                 prediction = self.clf.predict(data[self.feature_columns].iloc[idx])[0]
+#             except:
+#                 prediction = self.clf.predict(data[self.feature_columns].iloc[idx].values.reshape(1, -1))[0]
+#
+#         conf = np.abs(0.5 - prediction) * 2.0
+#         if conf > self.min_confidence:
+#             if not self.reverse:
+#                 if prediction >= 0.5:
+#                     return 'buy', prediction
+#                 else:
+#                     return 'sell', prediction
+#             else:
+#                 if prediction >= 0.5:
+#                     return 'sell', prediction
+#                 else:
+#                     return 'buy', prediction
+#         else:
+#             return 'none', prediction
+
+
+# MultiClass variant
 class MLClassifierStrategy:
-    def __init__(self, cllf, feature_columns, scaler, min_confidence=0.0, reverse=False):
+    def __init__(self, clf, feature_columns, scaler, min_confidence=0.0, reverse=False):
         # the sklearn classifier is already fitted to the data, we just store it here
-        self.clf = cllf
+        self.clf = clf
         self.feature_columns = feature_columns
         self.min_confidence = min_confidence
         self.scaler = scaler
@@ -604,10 +653,10 @@ class MLClassifierStrategy:
         # get the classifier prediction
         try:
             try:
-                prediction = self.clf.predict_proba(features)[0, 1]
+                prediction_proba = self.clf.predict_proba(features)
             except:
                 # AutoGluon prediction fix
-                prediction = self.clf.predict_proba(pd.DataFrame(features)).values[0, 1]
+                prediction_proba = self.clf.predict_proba(pd.DataFrame(features)).values
 
         except AttributeError:
             try:
@@ -615,20 +664,32 @@ class MLClassifierStrategy:
             except:
                 prediction = self.clf.predict(data[self.feature_columns].iloc[idx].values.reshape(1, -1))[0]
 
-        conf = np.abs(0.5 - prediction) * 2.0
+            prediction_proba = None
+
+        if prediction_proba is not None:
+            class_label = np.argmax(prediction_proba)
+            conf = np.max(prediction_proba)
+        else:
+            class_label = prediction
+            conf = np.abs(0.5 - prediction) * 2.0
+
         if conf > self.min_confidence:
             if not self.reverse:
-                if prediction >= 0.5:
-                    return 'buy', prediction
-                else:
-                    return 'sell', prediction
+                if class_label == 0:
+                    return 'buy', conf
+                elif class_label == 1:
+                    return 'sell', conf
+                elif class_label == 2:
+                    return 'none', conf
             else:
-                if prediction >= 0.5:
-                    return 'sell', prediction
-                else:
-                    return 'buy', prediction
+                if class_label == 0:
+                    return 'sell', conf
+                elif class_label == 1:
+                    return 'buy', conf
+                elif class_label == 2:
+                    return 'none', conf
         else:
-            return 'none', prediction
+            return 'none', conf
 
 
 market_start_time = pd.Timestamp("09:30:00").time()
@@ -953,17 +1014,30 @@ def get_X(data):
     """Return matrix X"""
     return data.filter(like='X').values
 
-
 def get_y(data):
     """ Return dependent variable y """
-    y = ((data.Close.shift(-1) - data.Open.shift(-1)) >= 0).astype(np.float32)
-    return y
+    if not multiclass:
+        y = ((data.Close.shift(-1) - data.Open.shift(-1)) >= 0).astype(np.float32)
+        return y
+    else:
+        move = (data.Close.shift(-1) - data.Open.shift(-1)).astype(np.float32)
+
+        y = np.zeros_like(move, dtype=np.int32)
+
+        y[move >= multiclass_move_threshold] = 0  # Class 0: 'buy'
+        y[move <= -multiclass_move_threshold] = 1  # Class 1: 'sell'
+        y[np.abs(move) < multiclass_move_threshold] = 2  # Class 2: 'do nothing'
+
+        return y
 
 
 def get_clean_Xy(df):
     """Return (X, y) cleaned of NaN values"""
     X = get_X(df)
-    y = get_y(df).values
+    try:
+        y = get_y(df).values
+    except:
+        y = get_y(df)
     isnan = np.isnan(y)
     X = X[~isnan]
     y = y[~isnan]
