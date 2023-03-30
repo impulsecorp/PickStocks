@@ -585,53 +585,6 @@ def train_classifier(clf_class, data, **kwargs):
     return clf, scaler
 
 
-# class MLClassifierStrategy:
-#     def __init__(self, clf, feature_columns, scaler, min_confidence=0.0, reverse=False):
-#         # the sklearn classifier is already fitted to the data, we just store it here
-#         self.clf = clf
-#         self.feature_columns = feature_columns
-#         self.min_confidence = min_confidence
-#         self.scaler = scaler
-#         self.reverse = reverse
-#
-#     def next(self, idx, data):
-#         if not hasattr(self, 'datafeats'):
-#             self.datafeats = data[self.feature_columns].values
-#
-#         # the current row is data[idx]
-#         # extract features for the previous row
-#         features = self.scaler.transform(self.datafeats[idx].reshape(1, -1))
-#
-#         # get the classifier prediction
-#         try:
-#             try:
-#                 prediction = self.clf.predict_proba(features)[0, 1]
-#             except:
-#                 # AutoGluon prediction fix
-#                 prediction = self.clf.predict_proba(pd.DataFrame(features)).values[0, 1]
-#
-#         except AttributeError:
-#             try:
-#                 prediction = self.clf.predict(data[self.feature_columns].iloc[idx])[0]
-#             except:
-#                 prediction = self.clf.predict(data[self.feature_columns].iloc[idx].values.reshape(1, -1))[0]
-#
-#         conf = np.abs(0.5 - prediction) * 2.0
-#         if conf > self.min_confidence:
-#             if not self.reverse:
-#                 if prediction >= 0.5:
-#                     return 'buy', prediction
-#                 else:
-#                     return 'sell', prediction
-#             else:
-#                 if prediction >= 0.5:
-#                     return 'sell', prediction
-#                 else:
-#                     return 'buy', prediction
-#         else:
-#             return 'none', prediction
-
-
 # MultiClass variant
 class MLClassifierStrategy:
     def __init__(self, clf, feature_columns, scaler, min_confidence=0.0, reverse=False):
@@ -782,13 +735,13 @@ def compute_stats(data, trades):
 
 def qbacktest(clf, scaler, data, quiet=0, reverse=False, **kwargs):
     s = MLClassifierStrategy(clf, list(data.filter(like='X')), scaler, reverse=reverse)
-    equity, pf, ktrades = backtest_ml_strategy(s, data, **kwargs)
+    equity, pf, trades = backtest_ml_strategy(s, data, **kwargs)
     if not quiet:
         plt.plot(equity)
         plt.xlabel('Bar #')
         plt.ylabel('Profit')
-        print(f'Profit factor: {pf:.5f}, Winners: {get_winner_pct(ktrades):.2f}%, Trades: {len(ktrades)}')
-    return equity, pf, ktrades
+        print(f'Profit factor: {pf:.5f}, Winners: {get_winner_pct(trades):.2f}%, Trades: {len(trades)}')
+    return equity, pf, trades
 
 
 #####################
