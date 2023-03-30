@@ -580,6 +580,12 @@ def train_classifier(clf_class, data, **kwargs):
         # Apply SMOTE oversampling to balance the training data
         sm = SMOTE(random_state=newseed())
         Xt, y = sm.fit_resample(Xt, y)
+
+    print('Data collected.')
+    print('Class 0 (up):', len(y[y == 0]))
+    print('Class 1 (down):', len(y[y == 1]))
+    print('Class 2 (none):', len(y[y == 2]))
+
     clf.fit(Xt, y)
     # print(f'Done. Mean CV score: {np.mean(cross_val_score(clf, Xt, y, cv=cv_folds, scoring="accuracy")):.5f}')
     return clf, scaler
@@ -994,11 +1000,6 @@ def get_clean_Xy(df):
     isnan = np.isnan(y)
     X = X[~isnan]
     y = y[~isnan]
-    
-    print('Data collected.')
-    print('Class 0 (up):', len(y[y == 0]))
-    print('Class 1 (down):', len(y[y == 1]))
-    print('Class 2 (none):', len(y[y == 2]))
 
     return X, y
 
