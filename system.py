@@ -994,6 +994,12 @@ def get_clean_Xy(df):
     isnan = np.isnan(y)
     X = X[~isnan]
     y = y[~isnan]
+    
+    print('Data collected.')
+    print('Class 0 (up):', len(y[y == 0]))
+    print('Class 1 (down):', len(y[y == 1]))
+    print('Class 2 (none):', len(y[y == 2]))
+
     return X, y
 
 
