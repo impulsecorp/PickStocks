@@ -1353,16 +1353,18 @@ def compute_feature_matrix(data, base_trades, bins='doane', min_pf=0.1, min_trad
     top_wns = []
     all_coords = []
     fbins_lens = []
+    fnames = []
     for pf, nt, wn, coords in zpd:
         if (nt >= min_trades) and (nt <= max_trades) and (pf >= min_pf):
             top_pfs.append(pf)
             top_nts.append(nt)
             top_wns.append(wn)
             fbins_lens.append(len(feat_bins[coords[0]]))
+            fnames.append( feature_names[coords[0]] )
             if topn is None:
                 all_coords.append( coords )
             elif (topn > 0) and (len(all_coords) < topn):
                 all_coords.append(coords)
     return (all_coords, feature_names, feat_bins,
-            pd.DataFrame(data=list(zip(top_pfs, top_nts, top_wns, fbins_lens)),
-                         columns=['PF', 'Trades', ' % Winners', 'bins']))
+            pd.DataFrame(data=list(zip(top_pfs, top_nts, top_wns, fnames, fbins_lens)),
+                         columns=['PF', 'Trades', ' % Winners', 'feature name', 'bins']))
