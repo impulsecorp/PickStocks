@@ -594,7 +594,7 @@ def train_classifier(clf_class, data, **kwargs):
     return clf, scaler
 
 
-def train_regressor(reg_class, data, **kwargs):
+def train_regressor(reg_class, data, plot_dist=0, **kwargs):
     print('Training', reg_class.__name__.split('.')[-1], '...', end=' ')
 
     reg = reg_class(**kwargs)
@@ -605,15 +605,15 @@ def train_regressor(reg_class, data, **kwargs):
     scaler = StandardScaler()
     Xt = scaler.fit_transform(X)
 
-    print('Data collected.')
-
-    # Plot histogram of the target variable (y)
-    plt.hist(y, bins='auto', alpha=0.7, color='blue', edgecolor='black')
-    plt.title('Distribution of Target Variable (Price Move)')
-    plt.xlabel('Price Move')
-    plt.ylabel('Frequency')
-    plt.grid(True)
-    plt.show()
+    if plot_dist:
+        print('Data collected.')
+        # Plot histogram of the target variable (y)
+        plt.hist(y, bins='auto', alpha=0.7, color='blue', edgecolor='black')
+        plt.title('Distribution of Target Variable (Price Move)')
+        plt.xlabel('Price Move')
+        plt.ylabel('Frequency')
+        plt.grid(True)
+        plt.show()
 
     reg.fit(Xt, y)
 
