@@ -441,7 +441,11 @@ def optimize_model(model, model_name, space, X_train, y_train, max_evals=120):
     def objective(params):
         try:
             model.set_params(random_state=newseed(), **params)
-            score = -np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
+            if regression:
+                score = -np.mean(
+                    cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="neg_mean_squared_error"))
+            else:
+                score = -np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
             return score
         except:
             return 9999999.0
