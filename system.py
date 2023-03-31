@@ -1312,3 +1312,9 @@ def common_rows(dataframes):
 
     # return the resulting dataframe
     return merged_df
+
+def combined_trades(alltrades, combine_method='or'):
+    if combine_method == 'or':
+        return pd.concat(alltrades, axis=0).drop_duplicates().sort_index()
+    else:
+        return common_rows(alltrades).sort_index()
