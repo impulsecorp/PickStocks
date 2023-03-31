@@ -34,7 +34,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 from sklearn.preprocessing import StandardScaler
 from gplearn.genetic import SymbolicRegressor
 from imblearn.over_sampling import SMOTE
-
+from copy import deepcopy
 
 def reseed():
     def seed_everything(s=0):
