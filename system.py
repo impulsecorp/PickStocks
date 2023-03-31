@@ -20,7 +20,7 @@ from sklearn.preprocessing import scale
 from tqdm.notebook import tqdm
 from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import VotingClassifier, BaggingClassifier, VotingRegressor, BaggingRegressor
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, ExtraTreesClassifier
@@ -71,8 +71,9 @@ max_tries = 0.2  # for optimization, percentage of the grid space to cover (1.0 
 cv_folds = 5
 balance_data = 1
 multiclass = 0
-multiclass_move_threshold = 0.2
+multiclass_move_threshold = 1.0
 regression = 0
+regression_move_threshold = 1.0
 
 
 # the objective function to maximize during optimization
@@ -593,6 +594,32 @@ def train_classifier(clf_class, data, **kwargs):
     return clf, scaler
 
 
+def train_regressor(reg_class, data, **kwargs):
+    print('Training', reg_class.__name__.split('.')[-1], '...', end=' ')
+
+    reg = reg_class(**kwargs)
+
+    N_TRAIN = int(data.shape[0] * train_set_end)
+    df = data.iloc[0:N_TRAIN]
+    X, y = get_clean_Xy(df)
+    scaler = StandardScaler()
+    Xt = scaler.fit_transform(X)
+
+    print('Data collected.')
+
+    # Plot histogram of the target variable (y)
+    plt.hist(y, bins='auto', alpha=0.7, color='blue', edgecolor='black')
+    plt.title('Distribution of Target Variable (Price Move)')
+    plt.xlabel('Price Move')
+    plt.ylabel('Frequency')
+    plt.grid(True)
+    plt.show()
+
+    reg.fit(Xt, y)
+
+    return reg, scaler
+
+
 # MultiClass variant
 class MLClassifierStrategy:
     def __init__(self, clf, feature_columns, scaler, min_confidence=0.0, reverse=False):
@@ -651,6 +678,45 @@ class MLClassifierStrategy:
                     return 'none', conf
         else:
             return 'none', conf
+
+
+class MLRegressorStrategy:
+    def __init__(self, reg, feature_columns, scaler, reverse=False):
+        # the sklearn regressor is already fitted to the data, we just store it here
+        self.reg = reg
+        self.feature_columns = feature_columns
+        self.scaler = scaler
+        self.reverse = reverse
+
+    def next(self, idx, data):
+        if not hasattr(self, 'datafeats'):
+            self.datafeats = data[self.feature_columns].values
+
+        # the current row is data[idx]
+        # extract features for the previous row
+        features = self.scaler.transform(self.datafeats[idx].reshape(1, -1))
+
+        # get the regressor prediction
+        try:
+            prediction = self.reg.predict(features)[0]
+        except:
+            # AutoGluon prediction fix
+            prediction = self.reg.predict(pd.DataFrame(features)).values[0]
+
+        # determine the action based on the predicted price move
+        if abs(prediction) > regression_move_threshold:
+            if not self.reverse:
+                if prediction > 0:
+                    return 'buy', prediction
+                elif prediction < 0:
+                    return 'sell', -prediction
+            else:
+                if prediction > 0:
+                    return 'sell', prediction
+                elif prediction < 0:
+                    return 'buy', -prediction
+        else:
+            return 'none', 0
 
 
 market_start_time = pd.Timestamp("09:30:00").time()
@@ -751,6 +817,15 @@ def qbacktest(clf, scaler, data, quiet=0, reverse=False, **kwargs):
         print(f'Profit factor: {pf:.5f}, Winners: {get_winner_pct(trades):.2f}%, Trades: {len(trades)}')
     return equity, pf, trades
 
+def rbacktest(reg, scaler, data, quiet=0, reverse=False, **kwargs):
+    s = MLRegressorStrategy(reg, list(data.filter(like='X')), scaler, reverse=reverse)
+    equity, pf, trades = backtest_ml_strategy(s, data, **kwargs)
+    if not quiet:
+        plt.plot(equity)
+        plt.xlabel('Bar #')
+        plt.ylabel('Profit')
+        print(f'Profit factor: {pf:.5f}, Winners: {get_winner_pct(trades):.2f}%, Trades: {len(trades)}')
+    return equity, pf, trades
 
 #####################
 # DATA PROCEDURES
