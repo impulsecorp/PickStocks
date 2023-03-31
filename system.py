@@ -7,6 +7,9 @@ warnings.filterwarnings('ignore')
 import random as rnd
 import time as stime
 
+import numpy as np
+import torch.nn as nn
+import torch.optim as optim
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.dates import date2num
@@ -16,21 +19,18 @@ from sklearn.neighbors import KernelDensity
 from sklearn.preprocessing import scale
 from tqdm.notebook import tqdm
 from sklearn.model_selection import cross_val_score
-from sklearn.ensemble import VotingClassifier, BaggingClassifier
+from sklearn.ensemble import VotingClassifier, BaggingClassifier, VotingRegressor, BaggingRegressor
 from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, ExtraTreesClassifier
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
-from catboost import CatBoostClassifier
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, ExtraTreesRegressor
+from xgboost import XGBClassifier, XGBRegressor
+from lightgbm import LGBMClassifier, LGBMRegressor
+from catboost import CatBoostClassifier, CatBoostRegressor
 from hyperopt import fmin, hp, rand
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
-from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 from sklearn.preprocessing import StandardScaler
 from gplearn.genetic import SymbolicRegressor
 from imblearn.over_sampling import SMOTE
@@ -72,6 +72,8 @@ cv_folds = 5
 balance_data = 1
 multiclass = 0
 multiclass_move_threshold = 0.2
+regression = 0
+
 
 # the objective function to maximize during optimization
 def objective(s):
@@ -95,7 +97,7 @@ def get_optdata(results, consts):
 
 def plot_result(bt, results):
     try:
-        bt.plot(plot_width=1200, plot_volume=False, plot_pl=1, resample=False);
+        bt.plot(plot_width=1200, plot_volume=False, plot_pl=1, resample=False)
     except Exception as ex:
         print(str(ex))
         plot(np.cumsum(results[0]['_trades']['PnL'].values));
@@ -260,13 +262,12 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
         return (proba[:, 1] > 0.5).astype(int)
 
 
-
 # Define the 4-layer feed-forward neural network
-import torch.nn.functional as F
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 
 class SelfAttention(nn.Module):
     def __init__(self, hidden_dim):
@@ -285,6 +286,7 @@ class SelfAttention(nn.Module):
 
         return attn_output
 
+
 class BinaryClassifier(nn.Module):
     def __init__(self, input_dim, hidden_dim):
         super(BinaryClassifier, self).__init__()
@@ -297,10 +299,10 @@ class BinaryClassifier(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid()
-            )
+        )
+
     def forward(self, x):
         return self.network(x)
-
 
 
 # Define the PyTorch wrapper to behave like an sklearn classifier
@@ -899,6 +901,46 @@ def make_synth_data(data_timeperiod='D', start='1990-1-1', end='2020-1-1', freq=
         return data
 
 
+def get_X(data):
+    """Return matrix X"""
+    return data.filter(like='X').values
+
+
+def get_y(data):
+    """ Return dependent variable y """
+    if regression:
+        y = (data.Close.shift(-1) - data.Open.shift(-1)).astype(np.float32)
+        return y
+    else:
+        if not multiclass:
+            y = ((data.Close.shift(-1) - data.Open.shift(-1)) >= 0).astype(np.float32)
+            return y
+        else:
+            move = (data.Close.shift(-1) - data.Open.shift(-1)).astype(np.float32)
+
+            y = np.zeros_like(move, dtype=np.int32)
+
+            y[move >= multiclass_move_threshold] = 0  # Class 0: 'buy'
+            y[move <= -multiclass_move_threshold] = 1  # Class 1: 'sell'
+            y[np.abs(move) < multiclass_move_threshold] = 2  # Class 2: 'do nothing'
+
+            return y
+
+
+def get_clean_Xy(df):
+    """Return (X, y) cleaned of NaN values"""
+    X = get_X(df)
+    try:
+        y = get_y(df).values
+    except:
+        y = get_y(df)
+    isnan = np.isnan(y)
+    X = X[~isnan]
+    y = y[~isnan]
+
+    return X, y
+
+
 def make_dataset(input_source, to_predict,
                  winlen=1, sliding_window_jump=1, predict_time_ahead=1,
                  remove_outliers=0, outlier_bounds=None, scaling=0, predict_method="default"):
@@ -943,7 +985,7 @@ def make_dataset(input_source, to_predict,
 
 
 def shuffle_split(c0, c1, balance_data=1):
-    # shuffle and shape data 
+    # shuffle and shape data
     if balance_data:
         samplesize = min(len(c0), len(c1))
         s1 = rnd.sample(c0, samplesize)
@@ -967,41 +1009,6 @@ def shuffle_split(c0, c1, balance_data=1):
 
     return x_train.astype(np.float32), x_test.astype(np.float32), y_train.astype(np.float32), y_test.astype(
         np.float32), x.astype(np.float32), y.astype(np.float32)
-
-
-def get_X(data):
-    """Return matrix X"""
-    return data.filter(like='X').values
-
-def get_y(data):
-    """ Return dependent variable y """
-    if not multiclass:
-        y = ((data.Close.shift(-1) - data.Open.shift(-1)) >= 0).astype(np.float32)
-        return y
-    else:
-        move = (data.Close.shift(-1) - data.Open.shift(-1)).astype(np.float32)
-
-        y = np.zeros_like(move, dtype=np.int32)
-
-        y[move >= multiclass_move_threshold] = 0  # Class 0: 'buy'
-        y[move <= -multiclass_move_threshold] = 1  # Class 1: 'sell'
-        y[np.abs(move) < multiclass_move_threshold] = 2  # Class 2: 'do nothing'
-
-        return y
-
-
-def get_clean_Xy(df):
-    """Return (X, y) cleaned of NaN values"""
-    X = get_X(df)
-    try:
-        y = get_y(df).values
-    except:
-        y = get_y(df)
-    isnan = np.isnan(y)
-    X = X[~isnan]
-    y = y[~isnan]
-
-    return X, y
 
 
 def do_RL_backtest(env, clfs, scaling=0, scalers=None,
