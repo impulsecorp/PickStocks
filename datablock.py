@@ -132,7 +132,7 @@ def procdata(ddd,
             data.index = dindex
         else:
             didx += 1
-            data['X' + uchar + 'feat_' + str(didx).lower()] = x
+            data['X' + uchar + x.name.lower()] = x
             data.index = dindex
         data.daily = daily
 
@@ -340,7 +340,7 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
             data.index = dindex
         else:
             didx += 1
-            data['X' + uchar + 'feat_' + str(didx).lower()] = x
+            data['X' + uchar + x.name.lower()] = x
             data.index = dindex
         data.daily = daily
 
