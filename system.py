@@ -1320,14 +1320,17 @@ def combined_trades(alltrades, combine_method='or'):
         return common_rows(alltrades).sort_index()
 
 
-def compute_feature_matrix(data, base_trades, nbins=10, min_pf=0.1, min_trades=10, max_trades=10000, topn=None):
+def compute_feature_matrix(data, base_trades, bins='doane', min_pf=0.1, min_trades=10, max_trades=10000, topn=None):
     feature_names = [featdeformat(x) for x in data.filter(like='X')]
     # feature_ranges = []
     feat_bins = []
     for fn in feature_names:
         d = data[featformat(fn)].values
-        hd = np.histogram(d, bins='doane')[1]
-        feat_bins.append(hd)
+        hd = np.histogram(d, bins=bins)[1]
+        if len(hd) > len(np.unique(d)):
+            feat_bins.append(np.linspace(np.min(d), np.max(d), len(np.unique(d))+1))
+        else:
+            feat_bins.append(hd)
     pf_matrix = []
     nt_matrix = []
     wn_matrix = []
