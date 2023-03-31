@@ -1318,3 +1318,47 @@ def combined_trades(alltrades, combine_method='or'):
         return pd.concat(alltrades, axis=0).drop_duplicates().sort_index()
     else:
         return common_rows(alltrades).sort_index()
+
+
+def compute_feature_matrix(data, base_trades, nbins=10, min_pf=0.1, min_trades=10, max_trades=10000, topn=None):
+    feature_names = [featdeformat(x) for x in data.filter(like='X')]
+    feature_ranges = []
+    for fn in feature_names:
+        d = data[featformat(fn)].values
+        feature_ranges.append((np.min(d), np.max(d)))
+    num_bins = nbins + 1
+    feat_bins = []
+    for fmin, fmax in feature_ranges:
+        feat_bins.append(np.linspace(fmin, fmax, num_bins))
+    feat_bins = np.array(feat_bins)
+    pf_matrix = []
+    nt_matrix = []
+    wn_matrix = []
+    coords = []
+    for row_idx, (fname, bins) in enumerate(zip(tqdm(feature_names), feat_bins)):
+        for col_idx in range(1,len(bins)):
+            if bins[col_idx-1] > bins[col_idx]:
+                bs = bins[col_idx], bins[col_idx-1]
+            else:
+                bs = bins[col_idx-1], bins[col_idx]
+            pf, ntrades = compute_stats(data, filter_trades_by_feature(base_trades, data, featformat(fname), min_value=bs[0], max_value=bs[1]))
+            if (pf != -1) and (len(ntrades) > 0):
+                pf_matrix.append(pf)
+                nt_matrix.append(len(ntrades))
+                wn_matrix.append(get_winner_pct(ntrades))
+                coords.append((row_idx, col_idx))
+    zpd = sorted(list(zip(pf_matrix, nt_matrix, wn_matrix, coords)), key = lambda x: x[2], reverse=True)
+    top_pfs = []
+    top_nts = []
+    top_wns = []
+    all_coords = []
+    for pf, nt, wn, coords in zpd:
+        if (nt >= min_trades) and (nt <= max_trades) and (pf >= min_pf):
+            top_pfs.append(pf)
+            top_nts.append(nt)
+            top_wns.append(wn)
+            if topn is None:
+                all_coords.append( coords )
+            elif (topn > 0) and (len(all_coords) < topn):
+                all_coords.append(coords)
+    return all_coords, feature_names, feat_bins, pd.DataFrame(data=list(zip(top_pfs, top_nts, top_wns)), columns=['PF', 'Trades', ' % Winners'])
