@@ -1297,3 +1297,18 @@ def kdplot(preds, rewards, *args, **kwargs):
     plt.scatter(preds, rewards, color='r', alpha=0.15);
     plot([np.min(preds), np.max(preds)], [np.mean(rewards), np.mean(rewards)], color='g', alpha=0.5);
     plot([np.mean(preds), np.mean(preds)], [np.min(rewards), np.max(rewards)], color='g', alpha=0.5);
+
+
+def common_rows(dataframes):
+    # check if the input is a list of at least two dataframes
+    if not isinstance(dataframes, list) or len(dataframes) < 2:
+        raise ValueError("Input must be a list of at least two dataframes")
+
+    # merge dataframes one by one based on their common columns
+    merged_df = dataframes[0]
+    for df in dataframes[1:]:
+        common_cols = list(set(merged_df.columns) & set(df.columns))
+        merged_df = pd.merge(merged_df, df, on=common_cols, how='inner')
+
+    # return the resulting dataframe
+    return merged_df
