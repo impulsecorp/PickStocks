@@ -1322,15 +1322,12 @@ def combined_trades(alltrades, combine_method='or'):
 
 def compute_feature_matrix(data, base_trades, nbins=10, min_pf=0.1, min_trades=10, max_trades=10000, topn=None):
     feature_names = [featdeformat(x) for x in data.filter(like='X')]
-    feature_ranges = []
+    # feature_ranges = []
+    feat_bins = []
     for fn in feature_names:
         d = data[featformat(fn)].values
-        feature_ranges.append((np.min(d), np.max(d)))
-    num_bins = nbins + 1
-    feat_bins = []
-    for fmin, fmax in feature_ranges:
-        feat_bins.append(np.linspace(fmin, fmax, num_bins))
-    feat_bins = np.array(feat_bins)
+        hd = np.histogram(d, bins='doane')[1]
+        feat_bins.append(hd)
     pf_matrix = []
     nt_matrix = []
     wn_matrix = []
@@ -1352,13 +1349,17 @@ def compute_feature_matrix(data, base_trades, nbins=10, min_pf=0.1, min_trades=1
     top_nts = []
     top_wns = []
     all_coords = []
+    fbins_lens = []
     for pf, nt, wn, coords in zpd:
         if (nt >= min_trades) and (nt <= max_trades) and (pf >= min_pf):
             top_pfs.append(pf)
             top_nts.append(nt)
             top_wns.append(wn)
+            fbins_lens.append(len(feat_bins[coords[0]]))
             if topn is None:
                 all_coords.append( coords )
             elif (topn > 0) and (len(all_coords) < topn):
                 all_coords.append(coords)
-    return all_coords, feature_names, feat_bins, pd.DataFrame(data=list(zip(top_pfs, top_nts, top_wns)), columns=['PF', 'Trades', ' % Winners'])
+    return (all_coords, feature_names, feat_bins,
+            pd.DataFrame(data=list(zip(top_pfs, top_nts, top_wns, fbins_lens)),
+                         columns=['PF', 'Trades', ' % Winners', 'bins']))
