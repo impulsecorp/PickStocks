@@ -1453,7 +1453,8 @@ def fitness_function(alltrades, objectives, eval_min_trades=10, worst_possible_f
 
 
 
-def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_prob, mutation_prob, objectives, worst_possible_fitness,
+def run_evolution(pop_size, toolbox, num_generations, survival_rate,
+                  crossover_prob, mutation_prob, objectives, worst_possible_fitness,
                   target_score = None, parallel = True, quiet=0):
     weights = np.array([x[1] for x in objectives])
     # Create initial population
@@ -1528,7 +1529,7 @@ def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_p
             ctop = tools.selBest(pop, 1)[0]
             ctf = np.dot(weights, np.array(ctop.fitness.values))
             if ctf > best_ever:
-                print('NEW RECORD:', ctf)
+                print(f'[#{gen}] NEW RECORD: {ctf}')
                 cbest = deepcopy(ctop)
                 best_ever = ctf
                 if (target_score is not None) and (ctf >= target_score):
