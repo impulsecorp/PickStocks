@@ -308,7 +308,7 @@ def procdata(ddd,
     lagged_features = features.shift(1)
     difference = features - lagged_features
     for column in difference.columns:
-        data[f'{column}'] = difference[column]
+        data[f'{column}_lagged'] = difference[column]
 
     data.daily = daily
     compute_custom_features(data, open_, high, low, close, uchar)
@@ -413,7 +413,7 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
     lagged_features = features.shift(1)
     difference = features - lagged_features
     for column in difference.columns:
-        data[f'{column}'] = difference[column]
+        data[f'{column}_lagged'] = difference[column]
 
     data.daily = daily
     compute_custom_features(data, open_, high, low, close, uchar)
