@@ -1494,7 +1494,10 @@ def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_p
                 child1, child2 = toolbox.clone(parents[0]), toolbox.clone(parents[1])
 
                 if rnd.random() < crossover_prob:
-                    toolbox.mate(child1, child2)
+                    try:
+                        toolbox.mate(child1, child2) # single/twopoint
+                    except:
+                        toolbox.mate(child1, child2, 0.5) # uniform
                     del child1.fitness.values
                     del child2.fitness.values
 
