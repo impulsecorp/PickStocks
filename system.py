@@ -1441,17 +1441,16 @@ def get_genome_alltrades_binned(data, genome, base_trades, feature_names, feat_b
 
 def fitness_function(alltrades, objectives, eval_min_trades=10, worst_possible_fitness=-999999.0):
     if len(alltrades) >= eval_min_trades:
-        return (x[0](alltrades) for x in objectives)
+        return tuple([x[0](alltrades) for x in objectives])
     else:
         if len(alltrades) > 0:
-            return (0.01 * (x[0](alltrades)) for x in objectives)
-
+            return tuple([(0.01 * (x[0](alltrades))) for x in objectives])
         else:
             return tuple([worst_possible_fitness] * len(objectives))
 
 
 def run_evolution(pop_size, toolbox, num_generations, crossover_prob, mutation_prob, objectives, worst_possible_fitness):
-    weights = list([x[1] for x in objectives])
+    weights = np.array([x[1] for x in objectives])
     # Create initial population
     pop = toolbox.population(n=pop_size)
     # Evaluate the initial population
@@ -1459,11 +1458,12 @@ def run_evolution(pop_size, toolbox, num_generations, crossover_prob, mutation_p
     for ind, fit in zip(pop, fitnesses):
         ind.fitness.values = fit
     # Set up the statistics and logbook
-    stats = tools.Statistics(lambda ind: np.dot(weights, ind.fitness.values))
+    stats = tools.Statistics(lambda ind: np.dot(weights, np.array(ind.fitness.values)))
+    stats.register("avg", np.mean)
     stats.register("min", np.min)
     stats.register("max", np.max)
     logbook = tools.Logbook()
-    logbook.header = "gen", "evals", "min", "max"
+    logbook.header = "gen", "evals", "min", "avg", "max"
     # Record initial population statistics
     record = stats.compile(pop)
     logbook.record(gen=0, evals=len(pop), **record)
@@ -1493,7 +1493,7 @@ def run_evolution(pop_size, toolbox, num_generations, crossover_prob, mutation_p
                 ind.fitness.values = fit
             # keep the best ever found
             ctop = tools.selBest(pop, 1)[0]
-            ctf = np.dot(weights, ctop.fitness.values)
+            ctf = np.dot(weights, np.array(ctop.fitness.values))
             if ctf > best_ever:
                 print('NEW RECORD:', ctf)
                 cbest = deepcopy(ctop)
@@ -1509,6 +1509,6 @@ def run_evolution(pop_size, toolbox, num_generations, crossover_prob, mutation_p
 
     # the best individual found
     best_ind = cbest
-    print("\nBest score: {}".format(np.dot(weights, best_ind.fitness.values)))
+    print("\nBest score: {}".format(np.dot(weights, np.array(best_ind.fitness.values))))
     return best_ind
 
