@@ -1036,14 +1036,14 @@ def get_X(data):
 def get_y(data):
     """ Return dependent variable y """
     if regression:
-        y = (data.Close.shift(0) - data.Open.shift(0)).astype(np.float32)
+        y = (data.Close - data.Open).astype(np.float32)
         return y
     else:
         if not multiclass:
-            y = ((data.Close.shift(0) - data.Open.shift(0)) < 0).astype(np.int32) # False = 0, so class 0, True = 1, so class 1
+            y = ((data.Close - data.Open) < 0).astype(np.int32) # False = 0, so class 0, True = 1, so class 1
             return y
         else:
-            move = (data.Close.shift(0) - data.Open.shift(0)).astype(np.float32)
+            move = (data.Close - data.Open).astype(np.float32)
 
             y = np.zeros_like(move, dtype=np.int32)
 
