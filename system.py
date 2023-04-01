@@ -1474,7 +1474,7 @@ def run_evolution(pop_size, toolbox, num_generations, crossover_prob, mutation_p
     try:
         for gen in range(1, num_generations + 1):
 
-            selected = toolbox.select(pop, len(pop)//5)
+            selected = toolbox.select(pop, len(pop)//8)
             offspring = []
 
             # # offspring = list(offspring)
