@@ -568,7 +568,8 @@ def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_feat
 
 
 def train_classifier(clf_class, data, quiet=0, **kwargs):
-    print('Training', clf_class.__name__.split('.')[-1], '...', end=' ')
+    if not quiet:
+        print('Training', clf_class.__name__.split('.')[-1], '...', end=' ')
 
     clf = clf_class(**kwargs)
 
@@ -596,7 +597,8 @@ def train_classifier(clf_class, data, quiet=0, **kwargs):
 
 
 def train_regressor(reg_class, data, plot_dist=0, **kwargs):
-    print('Training', reg_class.__name__.split('.')[-1], '...', end=' ')
+    if not quiet:
+        print('Training', reg_class.__name__.split('.')[-1], '...', end=' ')
 
     reg = reg_class(**kwargs)
 
