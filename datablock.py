@@ -293,9 +293,6 @@ def procdata(ddd,
         addx(ta.zlma(close, length=None, mamode=None, offset=None))
         addx(ta.zscore(close, length=None, std=None, offset=None))
 
-    data.daily = daily
-    compute_custom_features(data, open_, high, low, close, uchar)
-
     data = data.rename({'X__Open': 'Open',
                         'X__High': 'High',
                         'X__Low': 'Low',
@@ -312,6 +309,9 @@ def procdata(ddd,
     difference = features - lagged_features
     for column in difference.columns:
         data[f'{column}'] = difference[column]
+
+    data.daily = daily
+    compute_custom_features(data, open_, high, low, close, uchar)
 
     data.replace([np.inf, -np.inf], np.nan, inplace=True)
     data = data.fillna(0).astype(float)
@@ -398,9 +398,6 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
         addx(ta.supertrend(high, low, close, length=None, multiplier=None, offset=None))   
         addx(ta.willr(high, low, close, length=None, offset=None))
 
-    data.daily = daily
-    compute_custom_features(data, open_, high, low, close, uchar)
-
     data = data.rename({'X__Open': 'Open',
                         'X__High': 'High',
                         'X__Low': 'Low',
@@ -417,6 +414,9 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
     difference = features - lagged_features
     for column in difference.columns:
         data[f'{column}'] = difference[column]
+
+    data.daily = daily
+    compute_custom_features(data, open_, high, low, close, uchar)
 
     data.replace([np.inf, -np.inf], np.nan, inplace=True)
     data = data.fillna(0).astype(float)
