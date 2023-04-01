@@ -449,6 +449,12 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
     bestsofar = deepcopy(defaults)
     bestsofar_score = -99999.0
 
+    def sanitize(p):
+        toints = ['n_estimators', 'num_leaves', 'max_depth', 'min_child_samples', 'num_iterations']
+        for ti in toints:
+            if ti in p:
+                p[ti] = int(p[ti])
+
     def objective(params):
         global bestsofar, bestsofar_score
         try:
@@ -456,6 +462,8 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
             X_train_split, X_test_split, y_train_split, y_test_split = train_test_split(
                 X_train, y_train, test_size=test_size, random_state=rstate
             )
+            sanitize(params)
+            print(params)
             model.set_params(**params)
             model.fit(X_train_split, y_train_split)
 
@@ -483,6 +491,7 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
     # if we can't instantiate and train the model, use the defaults
     try:
         model = model_class(**kwargs)
+        sanitize(best)
         model.set_params(**best)
         model.fit(X_train[0:50], y_train[0:50])
     except Exception as ex:
@@ -491,6 +500,7 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
         best = defaults
 
     return best
+
 
 def train_hpo_ensemble(data):
     print('Training..')
@@ -777,9 +787,9 @@ def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
                 # Skip trading in pre/aftermarket hours
                 equity_curve[idx] = current_profit
                 continue
-        if (idx < int(train_set_end * len(data))) and skip_train:
+        if (idx <= int(train_set_end * len(data))) and skip_train:
             continue
-        if (idx < int(val_set_end * len(data))) and skip_val:
+        if (idx > int(train_set_end * len(data))) and (idx <= int(val_set_end * len(data))) and skip_val:
             continue
         if (idx > int(val_set_end * len(data))) and skip_test:
             continue
