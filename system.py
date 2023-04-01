@@ -36,7 +36,7 @@ from gplearn.genetic import SymbolicRegressor
 from imblearn.over_sampling import SMOTE
 from copy import deepcopy
 from deap import base, creator, tools, algorithms
-
+from joblib import Parallel, delayed
 
 def reseed():
     def seed_everything(s=0):
@@ -1461,15 +1461,23 @@ def fitness_function(alltrades, objectives, eval_min_trades=10, worst_possible_f
         return tuple([worst_possible_fitness] * len(objectives))
 
 
+
 def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_prob, mutation_prob, objectives, worst_possible_fitness,
-                  target_score = None):
+                  target_score = None, parallel = True):
     weights = np.array([x[1] for x in objectives])
     # Create initial population
     pop = toolbox.population(n=pop_size)
+
     # Evaluate the initial population
-    fitnesses = list(map(toolbox.evaluate, pop))
-    for ind, fit in zip(pop, fitnesses):
-        ind.fitness.values = fit
+    if not parallel:
+        fitnesses = list(map(toolbox.evaluate, pop))
+        for ind, fit in zip(pop, fitnesses):
+            ind.fitness.values = fit
+    else:
+        fitnesses = Parallel(n_jobs=-1)(delayed(toolbox.evaluate)(list(ind)) for ind in pop)
+        for ind, fit in zip(pop, fitnesses):
+            ind.fitness.values = fit
+
     # Set up the statistics and logbook
     stats = tools.Statistics(lambda ind: np.dot(weights, np.array(ind.fitness.values)))
     stats.register("avg", np.mean)
@@ -1515,9 +1523,15 @@ def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_p
                     del mutant.fitness.values
 
             # Evaluate offspring
-            fitnesses = list(map(toolbox.evaluate, offspring))
-            for ind, fit in zip(offspring, fitnesses):
-                ind.fitness.values = fit
+            if not parallel:
+                fitnesses = list(map(toolbox.evaluate, offspring))
+                for ind, fit in zip(offspring, fitnesses):
+                    ind.fitness.values = fit
+            else:
+                fitnesses = Parallel(n_jobs=-1)(delayed(toolbox.evaluate)(list(ind)) for ind in offspring)
+                for ind, fit in zip(offspring, fitnesses):
+                    ind.fitness.values = fit
+
             # keep the best ever found
             ctop = tools.selBest(pop, 1)[0]
             ctf = np.dot(weights, np.array(ctop.fitness.values))
