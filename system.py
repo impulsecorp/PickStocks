@@ -535,86 +535,11 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
     return best
 
 
-# def train_hpo_ensemble(data):
-#     print('Training..')
-#
-#     N_TRAIN = int(data.shape[0] * train_set_end)
-#     df = data.iloc[0:N_TRAIN]
-#     X_train, y_train = get_clean_Xy(df)
-#     scaler = StandardScaler()
-#     X_train = scaler.fit_transform(X_train)
-#     if balance_data:
-#         # Apply SMOTE oversampling to balance the training data
-#         sm = SMOTE(random_state=newseed())
-#         X_train, y_train = sm.fit_resample(X_train, y_train)
-#
-#     # Define classifiers and hyperparameter search spaces
-#     classifiers = [
-#         ("lr", LogisticRegression(), {"C": hp.loguniform("C", -5, 2),
-#                                       "max_iter": hp.choice("max_iter", range(5, 501)),
-#                                       "dual": hp.choice("dual", [True, False]),
-#                                       "fit_intercept": hp.choice("fit_intercept", [True, False])},
-#          150),
-#         ("knn", KNeighborsClassifier(), {"n_neighbors": hp.choice("n_neighbors", range(2, 101))},
-#          50),
-#         ("dt", DecisionTreeClassifier(), {"max_depth": hp.choice("max_depth", range(2, 21))},
-#          50),
-#         ("rf", RandomForestClassifier(), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
-#                                           "max_depth": hp.choice("max_depth", range(2, 21))},
-#          10),
-#         ("gb", GradientBoostingClassifier(), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
-#                                               "learning_rate": hp.loguniform("learning_rate", -5, 0),
-#                                               "max_depth": hp.choice("max_depth", range(2, 11))},
-#          3),
-#         ("xgb", XGBClassifier(use_label_encoder=False, eval_metric="logloss"),
-#          {"n_estimators": hp.choice("n_estimators", range(5, 201)),
-#           "learning_rate": hp.loguniform("learning_rate", -5, 0), "max_depth": hp.choice("max_depth", range(2, 11))},
-#          3),
-#         ("lgbm", LGBMClassifier(), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
-#                                     "learning_rate": hp.loguniform("learning_rate", -5, 0),
-#                                     "max_depth": hp.choice("max_depth", range(2, 11))},
-#          3),
-#         ("catboost", CatBoostClassifier(verbose=False), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
-#                                                          "learning_rate": hp.loguniform("learning_rate", -5, 0),
-#                                                          "max_depth": hp.choice("max_depth", range(2, 11))},
-#          3),
-#     ]
-#
-#     optimized_classifiers = []
-#
-#     for name, model, space, max_evals in classifiers:
-#         print(f"Optimizing {name}...")
-#         default_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
-#         def_params = model.get_params()
-#         best_hyperparams = optimize_model(model, name, space, X_train, y_train, max_evals=max_evals)
-#         try:
-#             model.set_params(**best_hyperparams)
-#             model.fit(X_train, y_train)
-#             optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
-#         except:
-#             print('Problematic config found, reverting to default parameters.')
-#             try:
-#                 model.set_params(**def_params)
-#                 optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
-#             except:
-#                 pass
-#             best_hyperparams = def_params
-#         print(
-#             f"{name}: Default score = {default_score:.4f}, Optimized score = {optimized_score:.4f}, Best hyperparameters = {best_hyperparams}")
-#         optimized_classifiers.append((name, model))
-#
-#     ensemble = VotingClassifier(optimized_classifiers, voting="soft")
-#     # Train ensemble on training data
-#     ensemble.fit(X_train, y_train)
-#     print(
-#         f'Ensemble trained. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
-#
-#     return ensemble, scaler
 
-
-def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_features=0.8, **kwargs):
+def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_features=0.8, quiet=0, **kwargs):
     clfs = []
-    print(f'Training ensemble: {ensemble_size} classifiers of type {clf_class.__name__.split(".")[-1]}... ', end=' ')
+    if not quiet:
+        print(f'Training ensemble: {ensemble_size} classifiers of type {clf_class.__name__.split(".")[-1]}... ', end=' ')
     for i in range(ensemble_size):
         try:
             clf = clf_class(random_state=newseed(), **kwargs)
@@ -637,12 +562,12 @@ def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_feat
                                  oob_score=True, random_state=newseed(), n_jobs=-1)
     # Train ensemble on training data
     ensemble.fit(X_train, y_train)
-    print(
-        f'Done. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
+    if not quiet:
+        print(f'Done. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
     return ensemble, scaler
 
 
-def train_classifier(clf_class, data, **kwargs):
+def train_classifier(clf_class, data, quiet=0, **kwargs):
     print('Training', clf_class.__name__.split('.')[-1], '...', end=' ')
 
     clf = clf_class(**kwargs)
@@ -660,13 +585,13 @@ def train_classifier(clf_class, data, **kwargs):
         sm = SMOTE(random_state=newseed())
         Xt, y = sm.fit_resample(Xt, y)
 
-    print('Data collected.')
-    print('Class 0 (up):', len(y[y == 0]))
-    print('Class 1 (down):', len(y[y == 1]))
-    print('Class 2 (none):', len(y[y == 2]))
+    if not quiet:
+        print('Data collected.')
+        print('Class 0 (up):', len(y[y == 0]))
+        print('Class 1 (down):', len(y[y == 1]))
+        print('Class 2 (none):', len(y[y == 2]))
 
     clf.fit(Xt, y)
-    # print(f'Done. Mean CV score: {np.mean(cross_val_score(clf, Xt, y, cv=cv_folds, scoring="accuracy")):.5f}')
     return clf, scaler
 
 
@@ -810,12 +735,16 @@ market_end_time = pd.Timestamp("16:00:00").time()
 
 
 def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
-                         commission=0.0, slippage=0.0, position_value=100000):
+                         commission=0.0, slippage=0.0, position_value=100000, quiet=0):
     equity_curve = np.zeros(len(data))
     trades = []
     current_profit = 0
 
-    for idx in tqdm(range(1, len(data))):
+    if quiet:
+        theiter = range(1, len(data))
+    else:
+        theiter = tqdm(range(1, len(data)))
+    for idx in theiter:
         current_time = data.index[idx].time()
         if not data.daily:
             if (current_time < market_start_time) or (current_time > market_end_time):
@@ -895,7 +824,7 @@ def compute_stats(data, trades):
 
 def qbacktest(clf, scaler, data, quiet=0, reverse=False, **kwargs):
     s = MLClassifierStrategy(clf, list(data.filter(like='X')), scaler, reverse=reverse)
-    equity, pf, trades = backtest_ml_strategy(s, data, **kwargs)
+    equity, pf, trades = backtest_ml_strategy(s, data, quiet=quiet, **kwargs)
     if not quiet:
         plt.plot(equity)
         plt.xlabel('Bar #')
@@ -905,7 +834,7 @@ def qbacktest(clf, scaler, data, quiet=0, reverse=False, **kwargs):
 
 def rbacktest(reg, scaler, data, quiet=0, reverse=False, **kwargs):
     s = MLRegressorStrategy(reg, list(data.filter(like='X')), scaler, reverse=reverse)
-    equity, pf, trades = backtest_ml_strategy(s, data, **kwargs)
+    equity, pf, trades = backtest_ml_strategy(s, data, quiet=quiet, **kwargs)
     if not quiet:
         plt.plot(equity)
         plt.xlabel('Bar #')
@@ -1523,7 +1452,7 @@ def fitness_function(alltrades, objectives, eval_min_trades=10, worst_possible_f
 
 
 def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_prob, mutation_prob, objectives, worst_possible_fitness,
-                  target_score = None, parallel = True):
+                  target_score = None, parallel = True, quiet=0):
     weights = np.array([x[1] for x in objectives])
     # Create initial population
     pop = toolbox.population(n=pop_size)
@@ -1548,7 +1477,8 @@ def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_p
     # Record initial population statistics
     record = stats.compile(pop)
     logbook.record(gen=0, evals=len(pop), **record)
-    print(logbook.stream)
+    if not quiet:
+        print(logbook.stream)
     # Run the genetic algorithm
     best_ever = worst_possible_fitness
     cbest = None
@@ -1607,7 +1537,8 @@ def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_p
             # Update the statistics and logbook
             record = stats.compile(pop)
             logbook.record(gen=gen, evals=len(pop), **record)
-            print(logbook.stream)
+            if not quiet:
+                print(logbook.stream)
     except KeyboardInterrupt:
         print('Interrupted.')
 
