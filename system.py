@@ -72,6 +72,7 @@ val_set_end = 0.7  # percentage point specifying the validation set end point (1
 max_tries = 0.2  # for optimization, percentage of the grid space to cover (1.0 = exchaustive search)
 cv_folds = 5
 balance_data = 1
+scale_data = 1
 multiclass = 0
 multiclass_move_threshold = 1.0
 regression = 0
@@ -584,7 +585,10 @@ def train_classifier(clf_class, data, **kwargs):
     df = data.iloc[0:N_TRAIN]
     X, y = get_clean_Xy(df)
     scaler = StandardScaler()
-    Xt = scaler.fit_transform(X)
+    if scale_data:
+        Xt = scaler.fit_transform(X)
+    else:
+        Xt = X
     if balance_data:
         # Apply SMOTE oversampling to balance the training data
         sm = SMOTE(random_state=newseed())
@@ -609,7 +613,10 @@ def train_regressor(reg_class, data, plot_dist=0, **kwargs):
     df = data.iloc[0:N_TRAIN]
     X, y = get_clean_Xy(df)
     scaler = StandardScaler()
-    Xt = scaler.fit_transform(X)
+    if scale_data:
+        Xt = scaler.fit_transform(X)
+    else:
+        Xt = X
 
     if plot_dist:
         print('Data collected.')
@@ -642,7 +649,10 @@ class MLClassifierStrategy:
 
         # the current row is data[idx]
         # extract features for the previous row
-        features = self.scaler.transform(self.datafeats[idx].reshape(1, -1))
+        if scale_data:
+            features = self.scaler.transform(self.datafeats[idx].reshape(1, -1))
+        else:
+            features = (self.datafeats[idx].reshape(1, -1))
 
         # get the classifier prediction
         try:
@@ -700,7 +710,10 @@ class MLRegressorStrategy:
 
         # the current row is data[idx]
         # extract features for the previous row
-        features = self.scaler.transform(self.datafeats[idx].reshape(1, -1))
+        if scale_data:
+            features = self.scaler.transform(self.datafeats[idx].reshape(1, -1))
+        else:
+            features = (self.datafeats[idx].reshape(1, -1))
 
         # get the regressor prediction
         try:
