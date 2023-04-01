@@ -1461,7 +1461,8 @@ def fitness_function(alltrades, objectives, eval_min_trades=10, worst_possible_f
         return tuple([worst_possible_fitness] * len(objectives))
 
 
-def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_prob, mutation_prob, objectives, worst_possible_fitness):
+def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_prob, mutation_prob, objectives, worst_possible_fitness,
+                  target_score = None):
     weights = np.array([x[1] for x in objectives])
     # Create initial population
     pop = toolbox.population(n=pop_size)
@@ -1484,7 +1485,8 @@ def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_p
     best_ever = worst_possible_fitness
     cbest = None
     try:
-        for gen in range(1, num_generations + 1):
+        ittt = range(1, num_generations + 1) if (target_score is None) else range(1, 100000000)
+        for gen in ittt:
 
             selected = toolbox.select(pop, int(len(pop)*survival_rate))
             offspring = []
@@ -1523,6 +1525,9 @@ def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_p
                 print('NEW RECORD:', ctf)
                 cbest = deepcopy(ctop)
                 best_ever = ctf
+                if (target_score is not None) and (ctf >= target_score):
+                    print('Target reached.')
+                    break
             # Replace the old population with the offspring and the best individuals
             pop[:] = offspring
             # Update the statistics and logbook
