@@ -1553,3 +1553,45 @@ def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_p
         print('Evolution failed to find anything')
         raise ValueError
 
+
+########################
+# Test utilities
+
+from scipy import stats
+def get_corr_info(x, y, plot=1):
+    slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+    print(f'slope: {slope}, intercept: {intercept}, determ. coeff: {r_value**2}, p={p_value}')
+    if plot:
+        plt.plot(x, y, 'o', label='original data')
+        plt.plot(x, intercept + slope*x, 'r', label='fitted line')
+        plt.legend()
+        plt.show()
+def testloop(num_iters, runner):
+    pf_datapoints = []
+    pr_datapoints = []
+    wn_datapoints = []
+    bs_datapoints = []
+    for iteration in tqdm(range(num_iters)):
+        print('ITERATION:', iteration)
+        valdata, testdata, bs = runner()
+        pf_datapoints.append([valdata[0], testdata[0]])
+        wn_datapoints.append([valdata[1], testdata[1]])
+        pr_datapoints.append([valdata[3], testdata[3]])
+        bs_datapoints.append(bs)
+
+        bsval = np.array(bs_datapoints)
+        pfsval = np.array([x[0] for x in pf_datapoints])
+        pfstest = np.array([x[1] for x in pf_datapoints])
+        prsval = np.array([x[0] for x in pr_datapoints])
+        prstest = np.array([x[1] for x in pr_datapoints])
+
+        print('PF val / PF test')
+        get_corr_info(pfsval, pfstest, plot=0)
+        print('profit val / profit test')
+        get_corr_info(prsval, prstest, plot=0)
+        print('bs val / PF test')
+        get_corr_info(bsval, pfstest, plot=0)
+        print('bs val / profit test')
+        get_corr_info(bsval, prstest, plot=0)
+    return bs_datapoints, pf_datapoints, pr_datapoints, wn_datapoints
+
