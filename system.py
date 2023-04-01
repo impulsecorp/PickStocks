@@ -1458,11 +1458,6 @@ def fitness_function(alltrades, objectives, eval_min_trades=10, worst_possible_f
         xk = [(x if (not (np.isnan(x) | np.isinf(x))) else worst_possible_fitness) for x in xk]
         return tuple(xk)
     else:
-        # if len(alltrades) > 0:
-        #     xk = [x[0](alltrades) for x in objectives]
-        #     xk = [((0.0001*x) if (not (np.isnan(x) | np.isinf(x))) else worst_possible_fitness) for x in xk]
-        #     return tuple(xk)
-        # else:
         return tuple([worst_possible_fitness] * len(objectives))
 
 
@@ -1536,6 +1531,10 @@ def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_p
 
     # the best individual found
     best_ind = cbest
-    print("\nBest score: {}".format(np.dot(weights, np.array(best_ind.fitness.values))))
-    return best_ind
+    try:
+        print("\nBest score: {}".format(np.dot(weights, np.array(best_ind.fitness.values))))
+        return best_ind
+    except:
+        print('Evolution failed to find anything. Returning a random individual.')
+        return pop[0]
 
