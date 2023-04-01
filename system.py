@@ -1474,19 +1474,42 @@ def run_evolution(pop_size, toolbox, num_generations, crossover_prob, mutation_p
     try:
         for gen in range(1, num_generations + 1):
 
-            offspring = toolbox.select(pop, len(pop)//4)
-            offspring = list(offspring)
-            rnd.shuffle(offspring)
-            # Apply crossover and mutation on the offspring
-            for child1, child2 in zip(offspring[::2], offspring[1::2]):
+            selected = toolbox.select(pop, len(pop)//5)
+            offspring = []
+
+            # # offspring = list(offspring)
+            # # rnd.shuffle(offspring)
+            # # Apply crossover and mutation on the offspring
+            # for child1, child2 in zip(offspring[::2], offspring[1::2]):
+            #     if rnd.random() < crossover_prob:
+            #         toolbox.mate(child1, child2)
+            #         del child1.fitness.values
+            #         del child2.fitness.values
+            # for mutant in offspring:
+            #     if rnd.random() < mutation_prob:
+            #         toolbox.mutate(mutant)
+            #         del mutant.fitness.values
+
+            while len(offspring) < len(pop):
+                parents = rnd.sample(selected, 2)
+                child1, child2 = toolbox.clone(parents[0]), toolbox.clone(parents[1])
+
                 if rnd.random() < crossover_prob:
                     toolbox.mate(child1, child2)
                     del child1.fitness.values
                     del child2.fitness.values
+
+                offspring.append(child1)
+                offspring.append(child2)
+
+                if len(offspring) > len(pop):
+                    offspring.pop()  # Remove extra individual if the population size is odd
+
             for mutant in offspring:
                 if rnd.random() < mutation_prob:
                     toolbox.mutate(mutant)
                     del mutant.fitness.values
+
             # Evaluate offspring
             fitnesses = list(map(toolbox.evaluate, offspring))
             for ind, fit in zip(offspring, fitnesses):
