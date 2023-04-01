@@ -803,9 +803,9 @@ def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
         shares = int(position_value / entry_price)
 
         if action == 'buy':
-            profit = (exit_price - entry_price - slippage) * shares - commission
+            profit = (exit_price - entry_price) * shares - commission
         elif action == 'sell':
-            profit = (entry_price - exit_price - slippage) * shares - commission
+            profit = (entry_price - exit_price) * shares - commission
         elif action == 'none':
             profit = 0.0
         else:
@@ -1036,14 +1036,14 @@ def get_X(data):
 def get_y(data):
     """ Return dependent variable y """
     if regression:
-        y = (data.Close.shift(-1) - data.Open.shift(-1)).astype(np.float32)
+        y = (data.Close.shift(0) - data.Open.shift(0)).astype(np.float32)
         return y
     else:
         if not multiclass:
-            y = ((data.Close.shift(-1) - data.Open.shift(-1)) < 0).astype(np.float32) # False = 0, so class 0, True = 1, so class 1
+            y = ((data.Close.shift(0) - data.Open.shift(0)) < 0).astype(np.int32) # False = 0, so class 0, True = 1, so class 1
             return y
         else:
-            move = (data.Close.shift(-1) - data.Open.shift(-1)).astype(np.float32)
+            move = (data.Close.shift(0) - data.Open.shift(0)).astype(np.float32)
 
             y = np.zeros_like(move, dtype=np.int32)
 
