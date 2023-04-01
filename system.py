@@ -28,7 +28,7 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, E
 from xgboost import XGBClassifier, XGBRegressor
 from lightgbm import LGBMClassifier, LGBMRegressor
 from catboost import CatBoostClassifier, CatBoostRegressor
-from hyperopt import fmin, hp, rand
+from hyperopt import fmin, hp, rand, tpe
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
 from sklearn.preprocessing import StandardScaler
@@ -37,6 +37,7 @@ from imblearn.over_sampling import SMOTE
 from copy import deepcopy
 from deap import base, creator, tools, algorithms
 from joblib import Parallel, delayed
+from sklearn.model_selection import train_test_split
 
 def reseed():
     def seed_everything(s=0):
@@ -438,37 +439,58 @@ class SymbolicRegressionClassifier(BaseEstimator, ClassifierMixin):
 #####################
 
 
-def optimize_model(model, model_name, space, X_train, y_train, max_evals=120):
-    defaults = model.get_params()
+bestsofar = None
+bestsofar_score = None
+def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=120, test_size=0.2, **kwargs):
+    global bestsofar, bestsofar_score
+    defaults = model_class(**kwargs).get_params()
+
+    rstate = newseed()
+    bestsofar = deepcopy(defaults)
+    bestsofar_score = -99999.0
 
     def objective(params):
+        global bestsofar, bestsofar_score
         try:
-            model.set_params(random_state=newseed(), **params)
+            model = model_class(**kwargs)
+            X_train_split, X_test_split, y_train_split, y_test_split = train_test_split(
+                X_train, y_train, test_size=test_size, random_state=rstate
+            )
+            model.set_params(**params)
+            model.fit(X_train_split, y_train_split)
+
             if regression:
-                score = -np.mean(
-                    cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="neg_mean_squared_error"))
+                score = -np.mean(model.score(X_test_split, y_test_split))
             else:
-                score = -np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
-            return score
-        except:
+                score = model.score(X_test_split, y_test_split)
+
+            if score > bestsofar_score:
+                print('NEW RECORD:', score)
+                bestsofar_score = score
+                bestsofar = params
+
+            return -score
+        except Exception as ex:
+            print(str(ex))
             return 9999999.0
 
-    best = fmin(fn=objective, space=space, algo=rand.suggest, max_evals=max_evals)
+    try:
+        best = fmin(fn=objective, space=space, algo=tpe.suggest, max_evals=max_evals)
+    except KeyboardInterrupt:
+        print('Interrupted. Best score so far:', bestsofar_score)
+        best = bestsofar
 
     # if we can't instantiate and train the model, use the defaults
     try:
-        try:
-            model.set_params(random_state=newseed(), **best)
-        except:
-            model.set_params(**best)
-        model.fit(X_train[0:15], y_train[0:15])
-    except:
+        model = model_class(**kwargs)
+        model.set_params(**best)
+        model.fit(X_train[0:50], y_train[0:50])
+    except Exception as ex:
+        print(str(ex))
         print('No better parameters than the defaults were found.')
-        model.set_params(**defaults)
         best = defaults
 
     return best
-
 
 def train_hpo_ensemble(data):
     print('Training..')
