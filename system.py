@@ -1445,12 +1445,12 @@ def fitness_function(alltrades, objectives, eval_min_trades=10, worst_possible_f
         xk = [(x if (not (np.isnan(x) | np.isinf(x))) else worst_possible_fitness) for x in xk]
         return tuple(xk)
     else:
-        if len(alltrades) > 0:
-            xk = [x[0](alltrades) for x in objectives]
-            xk = [(0.01*x if (not (np.isnan(x) | np.isinf(x))) else worst_possible_fitness) for x in xk]
-            return tuple(xk)
-        else:
-            return tuple([worst_possible_fitness] * len(objectives))
+        # if len(alltrades) > 0:
+        #     xk = [x[0](alltrades) for x in objectives]
+        #     xk = [((0.0001*x) if (not (np.isnan(x) | np.isinf(x))) else worst_possible_fitness) for x in xk]
+        #     return tuple(xk)
+        # else:
+        return tuple([worst_possible_fitness] * len(objectives))
 
 
 def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_prob, mutation_prob, objectives, worst_possible_fitness):
