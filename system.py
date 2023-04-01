@@ -35,6 +35,8 @@ from sklearn.preprocessing import StandardScaler
 from gplearn.genetic import SymbolicRegressor
 from imblearn.over_sampling import SMOTE
 from copy import deepcopy
+from deap import base, creator, tools, algorithms
+
 
 def reseed():
     def seed_everything(s=0):
@@ -1299,6 +1301,11 @@ def kdplot(preds, rewards, *args, **kwargs):
     plot([np.mean(preds), np.mean(preds)], [np.min(rewards), np.max(rewards)], color='g', alpha=0.5);
 
 
+#########################
+# GA code
+#########################
+
+
 def common_rows(dataframes):
     # check if the input is a list of at least two dataframes
     if not isinstance(dataframes, list) or len(dataframes) < 2:
@@ -1379,3 +1386,134 @@ def compute_ranges(data):
         d = data[featformat(fn)].values
         cs.append((np.min(d), np.max(d)))
     return feature_names, cs
+
+
+def get_genome_alltrades(data, genome, base_trades, feature_names, combine_method='and'):
+    alltrades = []
+    for i in range(len(genome)):
+        try:
+            r,c,d,a = genome[i]
+            if d == 'above':
+                _, mtrades = compute_stats(data,
+                                           filter_trades_by_feature(base_trades, data,
+                                                                    featformat(feature_names[r]),
+                                                                    min_value=c,
+                                                                    use_abs=a))
+            elif d == 'below':
+                _, mtrades = compute_stats(data,
+                                           filter_trades_by_feature(base_trades, data,
+                                                                    featformat(feature_names[r]),
+                                                                    max_value=c,
+                                                                    use_abs=a))
+            else:
+                _, mtrades = compute_stats(data,
+                                           filter_trades_by_feature(base_trades, data,
+                                                                    featformat(feature_names[r]),
+                                                                    exact_value=c,
+                                                                    use_abs=a))
+            alltrades.append(mtrades)
+        except Exception as ex:
+            print(ex)
+            print(i)
+            print(genome)
+    alltrades = combined_trades(alltrades, combine_method=combine_method)
+    return alltrades
+
+
+def get_genome_alltrades_binned(data, genome, base_trades, feature_names, feat_bins, combine_method='and'):
+    alltrades = []
+    for i in range(len(genome)):
+        try:
+            r,c = genome[i]
+            _, mtrades = compute_stats(data,
+                                       filter_trades_by_feature(base_trades, data,
+                                                                featformat(feature_names[r]),
+                                                                min_value=feat_bins[r][c-1],
+                                                                max_value=feat_bins[r][c]))
+            alltrades.append(mtrades)
+        except Exception as ex:
+            print(ex)
+            print(i)
+            print(genome)
+    alltrades = combined_trades(alltrades, combine_method=combine_method)
+    return alltrades
+
+def fitness_function(alltrades, eval_min_trades=10, multi_objective=1, worst_possible_fitness=-999999.0):
+    if len(alltrades) >= eval_min_trades:
+        if multi_objective:
+            return float(np.mean(alltrades['profit'].values)), float(get_winner_pct(alltrades)), float(get_profit_factor(alltrades)),
+        else:
+            return float(np.mean(alltrades['profit'].values)),
+    else:
+        if len(alltrades) > 0:
+            if multi_objective:
+                return 0.01*float(np.mean(alltrades['profit'].values)), 0.01*float(get_winner_pct(alltrades)), 0.01*float(get_profit_factor(alltrades)),
+            else:
+                return 0.01*float(np.mean(alltrades['profit'].values)),
+        else:
+            if multi_objective:
+                return worst_possible_fitness, worst_possible_fitness, worst_possible_fitness
+            else:
+                return worst_possible_fitness,
+
+def run_evolution(pop_size, toolbox, num_generations, crossover_prob, mutation_prob, weights, worst_possible_fitness):
+    # Create initial population
+    pop = toolbox.population(n=pop_size)
+    # Evaluate the initial population
+    fitnesses = list(map(toolbox.evaluate, pop))
+    for ind, fit in zip(pop, fitnesses):
+        ind.fitness.values = fit
+    # Set up the statistics and logbook
+    stats = tools.Statistics(lambda ind: np.dot(weights, ind.fitness.values))
+    stats.register("min", np.min)
+    stats.register("max", np.max)
+    logbook = tools.Logbook()
+    logbook.header = "gen", "evals", "min", "max"
+    # Record initial population statistics
+    record = stats.compile(pop)
+    logbook.record(gen=0, evals=len(pop), **record)
+    print(logbook.stream)
+    # Run the genetic algorithm
+    best_ever = worst_possible_fitness
+    cbest = None
+    try:
+        for gen in range(1, num_generations + 1):
+
+            offspring = toolbox.select(pop, len(pop))
+            offspring = list(offspring)
+            rnd.shuffle(offspring)
+            # Apply crossover and mutation on the offspring
+            for child1, child2 in zip(offspring[::2], offspring[1::2]):
+                if rnd.random() < crossover_prob:
+                    toolbox.mate(child1, child2)
+                    del child1.fitness.values
+                    del child2.fitness.values
+            for mutant in offspring:
+                if rnd.random() < mutation_prob:
+                    toolbox.mutate(mutant)
+                    del mutant.fitness.values
+            # Evaluate offspring
+            fitnesses = list(map(toolbox.evaluate, offspring))
+            for ind, fit in zip(offspring, fitnesses):
+                ind.fitness.values = fit
+            # keep the best ever found
+            ctop = tools.selBest(pop, 1)[0]
+            ctf = np.dot(weights, ctop.fitness.values)
+            if ctf > best_ever:
+                print('NEW RECORD:', ctf)
+                cbest = deepcopy(ctop)
+                best_ever = ctf
+            # Replace the old population with the offspring and the best individuals
+            pop[:] = offspring
+            # Update the statistics and logbook
+            record = stats.compile(pop)
+            logbook.record(gen=gen, evals=len(pop), **record)
+            print(logbook.stream)
+    except KeyboardInterrupt:
+        print('Interrupted.')
+
+    # the best individual found
+    best_ind = cbest
+    print("\nBest score: {}".format(np.dot(weights, best_ind.fitness.values)))
+    return best_ind
+
