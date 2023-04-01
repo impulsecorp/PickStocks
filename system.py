@@ -449,7 +449,7 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
     bestsofar = deepcopy(defaults)
     bestsofar_score = -99999.0
 
-    def sanitize(p):
+    def sanitize(p): # because some classifiers are picky about the numeric types of parameters
         toints = ['n_estimators', 'num_leaves', 'max_depth', 'min_child_samples', 'num_iterations']
         for ti in toints:
             if ti in p:
@@ -463,7 +463,6 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
                 X_train, y_train, test_size=test_size, random_state=rstate
             )
             sanitize(params)
-            print(params)
             model.set_params(**params)
             model.fit(X_train_split, y_train_split)
 
