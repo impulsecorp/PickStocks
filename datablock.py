@@ -296,18 +296,29 @@ def procdata(ddd,
     data.daily = daily
     compute_custom_features(data, open_, high, low, close, uchar)
 
-    data.replace([np.inf, -np.inf], np.nan, inplace=True)
-    data = data.fillna(0).astype(float)
-
-    # cut off the first N rows, because they are likely nans
-    if cut_first_N > 0: data = data[cut_first_N:]
-
     data = data.rename({'X__Open': 'Open',
                         'X__High': 'High',
                         'X__Low': 'Low',
                         'X__Close': 'Close',
                         'X__Volume': 'Volume',
                         }, axis=1)
+
+    # lag all features except the raw prices
+
+    # Filter columns with the 'X' prefix
+    features = data.filter(like='X')
+    # Lag the features by one period
+    lagged_features = features.shift(1)
+    difference = features - lagged_features
+    for column in difference.columns:
+        data[f'{column}'] = difference[column]
+
+    data.replace([np.inf, -np.inf], np.nan, inplace=True)
+    data = data.fillna(0).astype(float)
+
+    # cut off the first N rows, because they are likely nans
+    if cut_first_N > 0: data = data[cut_first_N:]
+
     data.daily = daily
     print('Done.')
     return data
@@ -390,18 +401,29 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
     data.daily = daily
     compute_custom_features(data, open_, high, low, close, uchar)
 
-    data.replace([np.inf, -np.inf], np.nan, inplace=True)
-    data = data.fillna(0).astype(float)
-
-    # cut off the first N rows, because they are likely nans
-    if cut_first_N > 0: data = data[cut_first_N:]
-
     data = data.rename({'X__Open': 'Open',
                         'X__High': 'High',
                         'X__Low': 'Low',
                         'X__Close': 'Close',
                         'X__Volume': 'Volume',
                         }, axis=1)
+
+    # lag all features except the raw prices
+
+    # Filter columns with the 'X' prefix
+    features = data.filter(like='X')
+    # Lag the features by one period
+    lagged_features = features.shift(1)
+    difference = features - lagged_features
+    for column in difference.columns:
+        data[f'{column}'] = difference[column]
+
+    data.replace([np.inf, -np.inf], np.nan, inplace=True)
+    data = data.fillna(0).astype(float)
+
+    # cut off the first N rows, because they are likely nans
+    if cut_first_N > 0: data = data[cut_first_N:]
+
     data.daily = daily
     print('Done.')
     return data
