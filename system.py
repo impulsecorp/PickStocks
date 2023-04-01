@@ -1441,9 +1441,13 @@ def get_genome_alltrades_binned(data, genome, base_trades, feature_names, feat_b
 
 def fitness_function(alltrades, objectives, eval_min_trades=10, worst_possible_fitness=-999999.0):
     if len(alltrades) >= eval_min_trades:
-        return tuple([x[0](alltrades) for x in objectives])
+        xk = [x[0](alltrades) for x in objectives]
+        xk = [(x if (not np.isnan(x)) else worst_possible_fitness) for x in xk]
+        return tuple(xk)
     else:
         if len(alltrades) > 0:
+            xk = [x[0](alltrades) for x in objectives]
+            xk = [(0.01*x if (not np.isnan(x)) else worst_possible_fitness) for x in xk]
             return tuple([(0.01 * (x[0](alltrades))) for x in objectives])
         else:
             return tuple([worst_possible_fitness] * len(objectives))
