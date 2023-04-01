@@ -1474,7 +1474,7 @@ def run_evolution(pop_size, toolbox, num_generations, crossover_prob, mutation_p
     try:
         for gen in range(1, num_generations + 1):
 
-            offspring = toolbox.select(pop, len(pop))
+            offspring = toolbox.select(pop, len(pop)//4)
             offspring = list(offspring)
             rnd.shuffle(offspring)
             # Apply crossover and mutation on the offspring
