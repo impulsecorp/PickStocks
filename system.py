@@ -1449,7 +1449,7 @@ def fitness_function(alltrades, objectives, eval_min_trades=10, worst_possible_f
             return tuple([worst_possible_fitness] * len(objectives))
 
 
-def run_evolution(pop_size, toolbox, num_generations, crossover_prob, mutation_prob, objectives, worst_possible_fitness):
+def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_prob, mutation_prob, objectives, worst_possible_fitness):
     weights = np.array([x[1] for x in objectives])
     # Create initial population
     pop = toolbox.population(n=pop_size)
@@ -1474,21 +1474,8 @@ def run_evolution(pop_size, toolbox, num_generations, crossover_prob, mutation_p
     try:
         for gen in range(1, num_generations + 1):
 
-            selected = toolbox.select(pop, len(pop)//8)
+            selected = toolbox.select(pop, int(len(pop)*survival_rate))
             offspring = []
-
-            # # offspring = list(offspring)
-            # # rnd.shuffle(offspring)
-            # # Apply crossover and mutation on the offspring
-            # for child1, child2 in zip(offspring[::2], offspring[1::2]):
-            #     if rnd.random() < crossover_prob:
-            #         toolbox.mate(child1, child2)
-            #         del child1.fitness.values
-            #         del child2.fitness.values
-            # for mutant in offspring:
-            #     if rnd.random() < mutation_prob:
-            #         toolbox.mutate(mutant)
-            #         del mutant.fitness.values
 
             while len(offspring) < len(pop):
                 parents = rnd.sample(selected, 2)
