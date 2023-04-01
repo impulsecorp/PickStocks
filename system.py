@@ -959,36 +959,29 @@ def fix_data(data1, data2):
     return data1, data2
 
 
-datadir = 'data'
-try:
-    os.mkdir('data')
-except:
-    pass
-
-
-def get_data(symbol, period='D', nrows=None):
+def get_data(symbol, period='D', nrows=None, datadir='data'):
     print('Loading..', end=' ')
     if period == 'd': period = 'D'
     sfn = symbol + '_' + period
     if period != 'D':
-        data = pd.read_csv(datadir + '/' + sfn + '.csv', nrows=nrows, parse_dates=['time'], index_col=0)
+        data = pd.read_csv(os.path.join(datadir, sfn + '.csv'), nrows=nrows, parse_dates=['time'], index_col=0)
         data.daily = 0
     else:
-        data = pd.read_csv(datadir + '/' + sfn + '.csv', nrows=nrows, parse_dates=['date'], index_col=0)
+        data = pd.read_csv(os.path.join(datadir, sfn + '.csv'), nrows=nrows, parse_dates=['date'], index_col=0)
         data.daily = 1
     print('Done.')
     return data
 
 
-def get_data_proc(symbol, period='D', nrows=None):
+def get_data_proc(symbol, period='D', nrows=None, datadir='data'):
     print('Loading..', end=' ')
     if period == 'd': period = 'D'
     sfn = symbol + '_' + period
     if period != 'D':
-        data = pd.read_csv(datadir + '/' + sfn + '_proc.csv', nrows=nrows, parse_dates=['time'], index_col=0)
+        data = pd.read_csv(os.path.join(datadir, sfn + '_proc.csv'), nrows=nrows, parse_dates=['time'], index_col=0)
         data.daily = 0
     else:
-        data = pd.read_csv(datadir + '/' + sfn + '_proc.csv', nrows=nrows, parse_dates=['date'], index_col=0)
+        data = pd.read_csv(os.path.join(datadir, sfn + '_proc.csv'), nrows=nrows, parse_dates=['date'], index_col=0)
         data.daily = 1
     print('Done.')
     return data
@@ -1622,8 +1615,8 @@ def run_evolution(pop_size, toolbox, num_generations, survival_rate, crossover_p
     best_ind = cbest
     try:
         print("\nBest score: {}".format(np.dot(weights, np.array(best_ind.fitness.values))))
-        return best_ind
+        return best_ind, best_ever
     except:
-        print('Evolution failed to find anything. Returning a random individual.')
-        return pop[0]
+        print('Evolution failed to find anything')
+        raise ValueError
 
