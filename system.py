@@ -1388,7 +1388,7 @@ def compute_ranges(data):
     return feature_names, cs
 
 
-def get_genome_alltrades(data, genome, base_trades, feature_names, combine_method='and'):
+def get_genome_alltrades_nonbinned(data, genome, base_trades, feature_names, combine_method='and'):
     alltrades = []
     for i in range(len(genome)):
         try:
@@ -1438,25 +1438,20 @@ def get_genome_alltrades_binned(data, genome, base_trades, feature_names, feat_b
     alltrades = combined_trades(alltrades, combine_method=combine_method)
     return alltrades
 
-def fitness_function(alltrades, eval_min_trades=10, multi_objective=1, worst_possible_fitness=-999999.0):
+
+def fitness_function(alltrades, objectives, eval_min_trades=10, worst_possible_fitness=-999999.0):
     if len(alltrades) >= eval_min_trades:
-        if multi_objective:
-            return float(np.mean(alltrades['profit'].values)), float(get_winner_pct(alltrades)), float(get_profit_factor(alltrades)),
-        else:
-            return float(np.mean(alltrades['profit'].values)),
+        return (x[0](alltrades) for x in objectives)
     else:
         if len(alltrades) > 0:
-            if multi_objective:
-                return 0.01*float(np.mean(alltrades['profit'].values)), 0.01*float(get_winner_pct(alltrades)), 0.01*float(get_profit_factor(alltrades)),
-            else:
-                return 0.01*float(np.mean(alltrades['profit'].values)),
-        else:
-            if multi_objective:
-                return worst_possible_fitness, worst_possible_fitness, worst_possible_fitness
-            else:
-                return worst_possible_fitness,
+            return (0.01 * (x[0](alltrades)) for x in objectives)
 
-def run_evolution(pop_size, toolbox, num_generations, crossover_prob, mutation_prob, weights, worst_possible_fitness):
+        else:
+            return tuple([worst_possible_fitness] * len(objectives))
+
+
+def run_evolution(pop_size, toolbox, num_generations, crossover_prob, mutation_prob, objectives, worst_possible_fitness):
+    weights = list([x[1] for x in objectives])
     # Create initial population
     pop = toolbox.population(n=pop_size)
     # Evaluate the initial population
