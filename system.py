@@ -38,6 +38,7 @@ from copy import deepcopy
 from deap import base, creator, tools, algorithms
 from joblib import Parallel, delayed
 from sklearn.model_selection import train_test_split
+from empyrical import sortino_ratio, omega_ratio, sharpe_ratio, calmar_ratio, stability_of_timeseries
 
 def reseed():
     def seed_everything(s=0):
@@ -330,15 +331,19 @@ class SelfAttention(nn.Module):
 
 
 class BinaryClassifier(nn.Module):
-    def __init__(self, input_dim, hidden_dim):
+    def __init__(self, input_dim, hidden_dim, dropout_prob=0.5):
         super(BinaryClassifier, self).__init__()
 
         self.network = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
             nn.ReLU(),
+            nn.Dropout(dropout_prob),
             SelfAttention(hidden_dim),
             nn.Linear(hidden_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
             nn.ReLU(),
+            nn.Dropout(dropout_prob),
             nn.Linear(hidden_dim, 1),
             nn.Sigmoid()
         )
@@ -1586,18 +1591,21 @@ def testloop(num_iters, runner):
     bs_datapoints = []
     for iteration in tqdm(range(num_iters)):
         print('ITERATION:', iteration)
-        valdata, testdata, bs = runner()
+        valdata, testdata, bsdata = runner()
         pf_datapoints.append([valdata[0], testdata[0]])
         wn_datapoints.append([valdata[1], testdata[1]])
         pr_datapoints.append([valdata[3], testdata[3]])
-        bs_datapoints.append(bs)
+        bs_datapoints.append([bsdata[0], bsdata[1]])
 
-        bsval = np.array(bs_datapoints)
+        bsval = np.array([x[0] for x in bs_datapoints])
+        bstest = np.array([x[1] for x in bs_datapoints])
         pfsval = np.array([x[0] for x in pf_datapoints])
         pfstest = np.array([x[1] for x in pf_datapoints])
         prsval = np.array([x[0] for x in pr_datapoints])
         prstest = np.array([x[1] for x in pr_datapoints])
 
+        print('bs val / bs test')
+        get_corr_info(bsval, bstest, plot=0)
         print('PF val / PF test')
         get_corr_info(pfsval, pfstest, plot=0)
         print('profit val / profit test')
