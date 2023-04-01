@@ -235,13 +235,15 @@ class GRUBinaryClassifier(nn.Module):
         return out
 
 class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
-    def __init__(self, input_dim, hidden_dim, batch_size=32, learning_rate=1e-3, n_epochs=50, type='lstm', device='cpu'):
+    def __init__(self, input_dim, hidden_dim, quiet=0,
+                 batch_size=32, learning_rate=1e-3, n_epochs=50, type='lstm', device='cpu'):
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.n_epochs = n_epochs
         self.device = device
+        self.quiet = quiet
         self.scaler = StandardScaler()
         if type == 'lstm':
             self.model = LSTMBinaryClassifier(input_dim, hidden_dim).to(device)
@@ -283,7 +285,8 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
             epoch_acc = correct / total
             epoch_loss /= len(train_loader)
 
-            print(f'Epoch {epoch} - Loss: {epoch_loss:.4f}, Accuracy: {epoch_acc:.4f}')
+            if not self.quiet:
+                print(f'Epoch {epoch} - Loss: {epoch_loss:.4f}, Accuracy: {epoch_acc:.4f}')
         return self
 
     def predict_proba(self, X):
@@ -346,7 +349,8 @@ class BinaryClassifier(nn.Module):
 
 # Define the PyTorch wrapper to behave like an sklearn classifier
 class PyTorchClassifierWrapper(BaseEstimator, ClassifierMixin):
-    def __init__(self, input_dim, hidden_dim, batch_size=32, learning_rate=1e-3, n_epochs=50, device='cpu'):
+    def __init__(self, input_dim, hidden_dim, quiet=0,
+                 batch_size=32, learning_rate=1e-3, n_epochs=50, device='cpu'):
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.batch_size = batch_size
@@ -357,6 +361,7 @@ class PyTorchClassifierWrapper(BaseEstimator, ClassifierMixin):
         self.model = BinaryClassifier(input_dim, hidden_dim).to(device)
         self.criterion = nn.BCELoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.quiet = quiet
 
     def fit(self, X, y):
         X = self.scaler.fit_transform(X)
@@ -387,7 +392,8 @@ class PyTorchClassifierWrapper(BaseEstimator, ClassifierMixin):
             epoch_acc = correct / total
             epoch_loss /= len(train_loader)
 
-            print(f'Epoch {epoch} - Loss: {epoch_loss:.4f}, Accuracy: {epoch_acc:.4f}')
+            if not self.quiet:
+                print(f'Epoch {epoch} - Loss: {epoch_loss:.4f}, Accuracy: {epoch_acc:.4f}')
 
         return self
 
@@ -571,7 +577,10 @@ def train_classifier(clf_class, data, quiet=0, **kwargs):
     if not quiet:
         print('Training', clf_class.__name__.split('.')[-1], '...', end=' ')
 
-    clf = clf_class(**kwargs)
+    try:
+        clf = clf_class(quiet=quiet, **kwargs)
+    except:
+        clf = clf_class(**kwargs)
 
     N_TRAIN = int(data.shape[0] * train_set_end)
     df = data.iloc[0:N_TRAIN]
@@ -600,7 +609,10 @@ def train_regressor(reg_class, data, quiet=0, plot_dist=0, **kwargs):
     if not quiet:
         print('Training', reg_class.__name__.split('.')[-1], '...', end=' ')
 
-    reg = reg_class(**kwargs)
+    try:
+        reg = reg_class(quiet=quiet, **kwargs)
+    except:
+        reg = reg_class(**kwargs)
 
     N_TRAIN = int(data.shape[0] * train_set_end)
     df = data.iloc[0:N_TRAIN]
