@@ -1372,10 +1372,10 @@ def compute_feature_matrix(data, base_trades, bins='doane', min_pf=0.1, min_trad
                          columns=['PF', 'Trades', ' % Winners', 'feature name', 'bin', 'total bins']))
 
 
-def compute_centers(data):
+def compute_ranges(data):
     feature_names = [featdeformat(x) for x in data.filter(like='X')]
     cs = []
     for fn in feature_names:
         d = data[featformat(fn)].values
-        cs.append((np.min(d), np.max(d), (np.max(d) - np.min(d))/2))
+        cs.append((np.min(d), np.max(d)))
     return feature_names, cs
