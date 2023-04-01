@@ -445,7 +445,7 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
     global bestsofar, bestsofar_score
     defaults = model_class(**kwargs).get_params()
 
-    rstate = newseed()
+    # rstate = newseed()
     bestsofar = deepcopy(defaults)
     bestsofar_score = -99999.0
 
@@ -460,7 +460,7 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
         try:
             model = model_class(**kwargs)
             X_train_split, X_test_split, y_train_split, y_test_split = train_test_split(
-                X_train, y_train, test_size=test_size, random_state=rstate
+                X_train, y_train, test_size=test_size, random_state=newseed(),
             )
             sanitize(params)
             model.set_params(**params)
@@ -501,81 +501,81 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
     return best
 
 
-def train_hpo_ensemble(data):
-    print('Training..')
-
-    N_TRAIN = int(data.shape[0] * train_set_end)
-    df = data.iloc[0:N_TRAIN]
-    X_train, y_train = get_clean_Xy(df)
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    if balance_data:
-        # Apply SMOTE oversampling to balance the training data
-        sm = SMOTE(random_state=newseed())
-        X_train, y_train = sm.fit_resample(X_train, y_train)
-
-    # Define classifiers and hyperparameter search spaces
-    classifiers = [
-        ("lr", LogisticRegression(), {"C": hp.loguniform("C", -5, 2),
-                                      "max_iter": hp.choice("max_iter", range(5, 501)),
-                                      "dual": hp.choice("dual", [True, False]),
-                                      "fit_intercept": hp.choice("fit_intercept", [True, False])},
-         150),
-        ("knn", KNeighborsClassifier(), {"n_neighbors": hp.choice("n_neighbors", range(2, 101))},
-         50),
-        ("dt", DecisionTreeClassifier(), {"max_depth": hp.choice("max_depth", range(2, 21))},
-         50),
-        ("rf", RandomForestClassifier(), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
-                                          "max_depth": hp.choice("max_depth", range(2, 21))},
-         10),
-        ("gb", GradientBoostingClassifier(), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
-                                              "learning_rate": hp.loguniform("learning_rate", -5, 0),
-                                              "max_depth": hp.choice("max_depth", range(2, 11))},
-         3),
-        ("xgb", XGBClassifier(use_label_encoder=False, eval_metric="logloss"),
-         {"n_estimators": hp.choice("n_estimators", range(5, 201)),
-          "learning_rate": hp.loguniform("learning_rate", -5, 0), "max_depth": hp.choice("max_depth", range(2, 11))},
-         3),
-        ("lgbm", LGBMClassifier(), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
-                                    "learning_rate": hp.loguniform("learning_rate", -5, 0),
-                                    "max_depth": hp.choice("max_depth", range(2, 11))},
-         3),
-        ("catboost", CatBoostClassifier(verbose=False), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
-                                                         "learning_rate": hp.loguniform("learning_rate", -5, 0),
-                                                         "max_depth": hp.choice("max_depth", range(2, 11))},
-         3),
-    ]
-
-    optimized_classifiers = []
-
-    for name, model, space, max_evals in classifiers:
-        print(f"Optimizing {name}...")
-        default_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
-        def_params = model.get_params()
-        best_hyperparams = optimize_model(model, name, space, X_train, y_train, max_evals=max_evals)
-        try:
-            model.set_params(**best_hyperparams)
-            model.fit(X_train, y_train)
-            optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
-        except:
-            print('Problematic config found, reverting to default parameters.')
-            try:
-                model.set_params(**def_params)
-                optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
-            except:
-                pass
-            best_hyperparams = def_params
-        print(
-            f"{name}: Default score = {default_score:.4f}, Optimized score = {optimized_score:.4f}, Best hyperparameters = {best_hyperparams}")
-        optimized_classifiers.append((name, model))
-
-    ensemble = VotingClassifier(optimized_classifiers, voting="soft")
-    # Train ensemble on training data
-    ensemble.fit(X_train, y_train)
-    print(
-        f'Ensemble trained. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
-
-    return ensemble, scaler
+# def train_hpo_ensemble(data):
+#     print('Training..')
+#
+#     N_TRAIN = int(data.shape[0] * train_set_end)
+#     df = data.iloc[0:N_TRAIN]
+#     X_train, y_train = get_clean_Xy(df)
+#     scaler = StandardScaler()
+#     X_train = scaler.fit_transform(X_train)
+#     if balance_data:
+#         # Apply SMOTE oversampling to balance the training data
+#         sm = SMOTE(random_state=newseed())
+#         X_train, y_train = sm.fit_resample(X_train, y_train)
+#
+#     # Define classifiers and hyperparameter search spaces
+#     classifiers = [
+#         ("lr", LogisticRegression(), {"C": hp.loguniform("C", -5, 2),
+#                                       "max_iter": hp.choice("max_iter", range(5, 501)),
+#                                       "dual": hp.choice("dual", [True, False]),
+#                                       "fit_intercept": hp.choice("fit_intercept", [True, False])},
+#          150),
+#         ("knn", KNeighborsClassifier(), {"n_neighbors": hp.choice("n_neighbors", range(2, 101))},
+#          50),
+#         ("dt", DecisionTreeClassifier(), {"max_depth": hp.choice("max_depth", range(2, 21))},
+#          50),
+#         ("rf", RandomForestClassifier(), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
+#                                           "max_depth": hp.choice("max_depth", range(2, 21))},
+#          10),
+#         ("gb", GradientBoostingClassifier(), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
+#                                               "learning_rate": hp.loguniform("learning_rate", -5, 0),
+#                                               "max_depth": hp.choice("max_depth", range(2, 11))},
+#          3),
+#         ("xgb", XGBClassifier(use_label_encoder=False, eval_metric="logloss"),
+#          {"n_estimators": hp.choice("n_estimators", range(5, 201)),
+#           "learning_rate": hp.loguniform("learning_rate", -5, 0), "max_depth": hp.choice("max_depth", range(2, 11))},
+#          3),
+#         ("lgbm", LGBMClassifier(), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
+#                                     "learning_rate": hp.loguniform("learning_rate", -5, 0),
+#                                     "max_depth": hp.choice("max_depth", range(2, 11))},
+#          3),
+#         ("catboost", CatBoostClassifier(verbose=False), {"n_estimators": hp.choice("n_estimators", range(5, 201)),
+#                                                          "learning_rate": hp.loguniform("learning_rate", -5, 0),
+#                                                          "max_depth": hp.choice("max_depth", range(2, 11))},
+#          3),
+#     ]
+#
+#     optimized_classifiers = []
+#
+#     for name, model, space, max_evals in classifiers:
+#         print(f"Optimizing {name}...")
+#         default_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
+#         def_params = model.get_params()
+#         best_hyperparams = optimize_model(model, name, space, X_train, y_train, max_evals=max_evals)
+#         try:
+#             model.set_params(**best_hyperparams)
+#             model.fit(X_train, y_train)
+#             optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
+#         except:
+#             print('Problematic config found, reverting to default parameters.')
+#             try:
+#                 model.set_params(**def_params)
+#                 optimized_score = np.mean(cross_val_score(model, X_train, y_train, cv=cv_folds, scoring="accuracy"))
+#             except:
+#                 pass
+#             best_hyperparams = def_params
+#         print(
+#             f"{name}: Default score = {default_score:.4f}, Optimized score = {optimized_score:.4f}, Best hyperparameters = {best_hyperparams}")
+#         optimized_classifiers.append((name, model))
+#
+#     ensemble = VotingClassifier(optimized_classifiers, voting="soft")
+#     # Train ensemble on training data
+#     ensemble.fit(X_train, y_train)
+#     print(
+#         f'Ensemble trained. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
+#
+#     return ensemble, scaler
 
 
 def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_features=0.8, **kwargs):
@@ -591,7 +591,8 @@ def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_feat
     df = data.iloc[0:N_TRAIN]
     X_train, y_train = get_clean_Xy(df)
     scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
+    if scale_data:
+        X_train = scaler.fit_transform(X_train)
     if balance_data:
         # Apply SMOTE oversampling to balance the training data
         sm = SMOTE(random_state=newseed())
@@ -686,6 +687,7 @@ class MLClassifierStrategy:
             features = (self.datafeats[idx].reshape(1, -1))
 
         # get the classifier prediction
+        prediction = 0.5
         try:
             try:
                 prediction_proba = self.clf.predict_proba(features)
@@ -708,7 +710,7 @@ class MLClassifierStrategy:
             class_label = prediction
             conf = np.abs(0.5 - prediction) * 2.0
 
-        if conf > self.min_confidence:
+        if conf >= self.min_confidence:
             if not self.reverse:
                 if class_label == 0:
                     return 'buy', conf
@@ -1038,7 +1040,7 @@ def get_y(data):
         return y
     else:
         if not multiclass:
-            y = ((data.Close.shift(-1) - data.Open.shift(-1)) >= 0).astype(np.float32)
+            y = ((data.Close.shift(-1) - data.Open.shift(-1)) < 0).astype(np.float32) # False = 0, so class 0, True = 1, so class 1
             return y
         else:
             move = (data.Close.shift(-1) - data.Open.shift(-1)).astype(np.float32)
