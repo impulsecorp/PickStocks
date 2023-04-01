@@ -219,8 +219,23 @@ class LSTMBinaryClassifier(nn.Module):
         return out
 
 
+class GRUBinaryClassifier(nn.Module):
+    def __init__(self, input_dim, hidden_dim):
+        super(GRUBinaryClassifier, self).__init__()
+
+        self.lstm = nn.GRU(input_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, 1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        lstm_out, _ = self.lstm(x)
+        lstm_out = lstm_out[:, -1, :]  # only take the last output of the sequence
+        out = self.fc(lstm_out)
+        out = self.sigmoid(out)
+        return out
+
 class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
-    def __init__(self, input_dim, hidden_dim, batch_size=32, learning_rate=1e-3, n_epochs=50, device='cpu'):
+    def __init__(self, input_dim, hidden_dim, batch_size=32, learning_rate=1e-3, n_epochs=50, type='lstm', device='cpu'):
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.batch_size = batch_size
@@ -228,7 +243,13 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
         self.n_epochs = n_epochs
         self.device = device
         self.scaler = StandardScaler()
-        self.model = LSTMBinaryClassifier(input_dim, hidden_dim).to(device)
+        if type == 'lstm':
+            self.model = LSTMBinaryClassifier(input_dim, hidden_dim).to(device)
+        elif type == 'gru':
+            self.model = GRUBinaryClassifier(input_dim, hidden_dim).to(device)
+        else:
+            # default is LSTM
+            self.model = LSTMBinaryClassifier(input_dim, hidden_dim).to(device)
         self.criterion = nn.BCELoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
@@ -243,13 +264,26 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
 
         self.model.train()
         for epoch in range(self.n_epochs):
-            if epoch % 10 == 0: print(f'Epochs: {epoch}/{self.n_epochs}')
+            epoch_loss = 0
+            correct = 0
+            total = 0
             for batch_x, batch_y in train_loader:
                 self.optimizer.zero_grad()
                 outputs = self.model(batch_x)
                 loss = self.criterion(outputs, batch_y)
+                epoch_loss += loss.item()
                 loss.backward()
                 self.optimizer.step()
+
+                # Compute accuracy
+                predicted = torch.round(outputs)
+                correct += (predicted == batch_y).sum().item()
+                total += batch_y.size(0)
+
+            epoch_acc = correct / total
+            epoch_loss /= len(train_loader)
+
+            print(f'Epoch {epoch} - Loss: {epoch_loss:.4f}, Accuracy: {epoch_acc:.4f}')
         return self
 
     def predict_proba(self, X):
@@ -467,7 +501,7 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
             model.fit(X_train_split, y_train_split)
 
             if regression:
-                score = -np.mean(model.score(X_test_split, y_test_split))
+                score = np.mean(model.score(X_test_split, y_test_split))
             else:
                 score = model.score(X_test_split, y_test_split)
 
@@ -760,12 +794,12 @@ class MLRegressorStrategy:
             if not self.reverse:
                 if prediction > 0:
                     return 'buy', prediction
-                elif prediction < 0:
+                elif prediction <= 0:
                     return 'sell', -prediction
             else:
                 if prediction > 0:
                     return 'sell', prediction
-                elif prediction < 0:
+                elif prediction <= 0:
                     return 'buy', -prediction
         else:
             return 'none', 0
