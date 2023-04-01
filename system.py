@@ -596,7 +596,7 @@ def train_classifier(clf_class, data, quiet=0, **kwargs):
     return clf, scaler
 
 
-def train_regressor(reg_class, data, plot_dist=0, **kwargs):
+def train_regressor(reg_class, data, quiet=0, plot_dist=0, **kwargs):
     if not quiet:
         print('Training', reg_class.__name__.split('.')[-1], '...', end=' ')
 
