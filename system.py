@@ -892,19 +892,17 @@ def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
 
 
 def get_winner_pct(trades):
-    atrades = trades.copy()
-    if len(atrades) > 0:
-        winners = (len(atrades.loc[atrades['profit'].values >= 0.0]) / len(atrades)) * 100.0
+    if len(trades) > 0:
+        winners = (len(trades.loc[trades['profit'].values >= 0.0]) / len(trades)) * 100.0
     else:
-        winners = -1.0
+        winners = 0.0
     return winners
 
 
 def get_profit_factor(trades):
-    atrades = trades.copy()
-    gross_profit = atrades[atrades['profit'] >= 0]['profit'].sum()
-    gross_loss = np.abs(atrades[atrades['profit'] < 0]['profit'].sum())
-    profit_factor = gross_profit / gross_loss if gross_loss != 0 else -1
+    gross_profit = trades[trades['profit'] >= 0]['profit'].sum()
+    gross_loss = np.abs(trades[trades['profit'] < 0]['profit'].sum())
+    profit_factor = gross_profit / gross_loss if gross_loss != 0 else 0
     return profit_factor
 
 
@@ -916,7 +914,7 @@ def compute_stats(data, trades):
     try:
         return get_profit_factor(trades_df), trades_df
     except:
-        return -1, pd.DataFrame(columns=['pos', 'shares', 'entry_datetime', 'exit_datetime', 'entry_bar',
+        return 0, pd.DataFrame(columns=['pos', 'shares', 'entry_datetime', 'exit_datetime', 'entry_bar',
                                          'exit_bar', 'entry_price', 'exit_price', 'profit'])
 
 
