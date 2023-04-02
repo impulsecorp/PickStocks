@@ -227,24 +227,6 @@ class GRUBinaryClassifier(nn.Module):
         return out.squeeze()
 
 
-class LSTMBinaryClassifier(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
-        super(LSTMBinaryClassifier, self).__init__()
-
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
-        self.fc = nn.Linear(hidden_dim, 1)
-        self.sigmoid = nn.Sigmoid()
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x):
-        lstm_out, _ = self.lstm(x)
-        lstm_out = lstm_out[:, -1] 
-        lstm_out = self.dropout(lstm_out)
-        out = self.fc(lstm_out)
-        out = self.sigmoid(out)
-        return out.squeeze()
-
-
 class Custom3DScaler():
     def fit(self, X):
         self.mean_ = X.mean(axis=(0, 1))
@@ -255,6 +237,41 @@ class Custom3DScaler():
 
     def inverse_transform(self, X):
         return X * self.std_ + self.mean_
+
+
+# class LSTMBinaryClassifier(nn.Module):
+#     def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
+#         super(LSTMBinaryClassifier, self).__init__()
+#
+#         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
+#         self.fc = nn.Linear(hidden_dim, 1)
+#         self.sigmoid = nn.Sigmoid()
+#         self.dropout = nn.Dropout(dropout)
+#
+#     def forward(self, x):
+#         lstm_out, _ = self.lstm(x)
+#         lstm_out = lstm_out[:, -1]
+#         lstm_out = self.dropout(lstm_out)
+#         out = self.fc(lstm_out)
+#         out = self.sigmoid(out)
+#         return out.squeeze()
+
+class LSTMBinaryClassifier(nn.Module):
+    def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
+        super(LSTMBinaryClassifier, self).__init__()
+
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
+        self.fc = nn.Linear(hidden_dim, 2)  # Change output dimension to 2
+        self.softmax = nn.Softmax(dim=1)  # Replace sigmoid with softmax
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        lstm_out, _ = self.lstm(x)
+        lstm_out = lstm_out[:, -1]
+        lstm_out = self.dropout(lstm_out)
+        out = self.fc(lstm_out)
+        out = self.softmax(out)  # Use softmax instead of sigmoid
+        return out
 
 
 class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
@@ -276,7 +293,7 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
         else:
             # default is LSTM
             self.model = LSTMBinaryClassifier(input_dim, hidden_dim).to(device)
-        self.criterion = nn.BCELoss()
+        self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
     def fit(self, X, y):
@@ -284,7 +301,8 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
         X = self.scaler.transform(X)
 
         X_train_tensor = torch.tensor(X, dtype=torch.float).to(self.device)
-        y_train_tensor = torch.tensor(y, dtype=torch.float).view(-1, 1).to(self.device)
+        y_train_tensor = torch.tensor(y, dtype=torch.long).to(self.device)  # Change dtype to torch.long
+        y_train_tensor = F.one_hot(y_train_tensor)  # Convert y to one-hot encoding
 
         train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
@@ -298,15 +316,15 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
                 for batch_x, batch_y in train_loader:
                     self.optimizer.zero_grad()
                     outputs = self.model(batch_x)
-                    batch_y = batch_y.squeeze(1) # Add an extra dimension to y to match the output shape
-                    loss = self.criterion(outputs, batch_y)
+                    # batch_y = batch_y.squeeze(1) # Add an extra dimension to y to match the output shape
+                    loss = self.criterion(outputs, batch_y.to(torch.float))
                     epoch_loss += loss.item()
                     loss.backward()
                     self.optimizer.step()
 
                     # Compute accuracy
-                    predicted = torch.round(outputs)
-                    correct += (predicted == batch_y).sum().item()
+                    predicted = torch.argmax(outputs, 1)  # Get the class with the maximum probability
+                    correct += (predicted == torch.argmax(batch_y)).sum().item()
                     total += batch_y.size(0)
 
                 epoch_acc = correct / total
@@ -318,19 +336,22 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
             print('Interrupted.')
         return self
 
+    # def predict_proba(self, X):
+    #     X = self.scaler.transform(X)
+    #     X_test_tensor = torch.tensor(X, dtype=torch.float).to(self.device)
+    #
+    #     self.model.eval()
+    #     with torch.no_grad():
+    #         outputs = self.model(X_test_tensor).cpu().numpy()
+    #     return np.hstack((1 - outputs, outputs))
     def predict_proba(self, X):
         X = self.scaler.transform(X)
         X_test_tensor = torch.tensor(X, dtype=torch.float).to(self.device)
 
         self.model.eval()
         with torch.no_grad():
-            outputs = self.model(X_test_tensor).cpu().numpy()
-        return np.hstack((1 - outputs, outputs))
-
-    def predict(self, X):
-        proba = self.predict_proba(X)
-        return (proba[:, 1] > 0.5).astype(int)
-
+            outputs = self.model(X_test_tensor).cpu().numpy().reshape(-1)
+        return outputs
 
 class SelfAttention(nn.Module):
     def __init__(self, hidden_dim):
@@ -694,70 +715,14 @@ def train_regressor(reg_class, data, quiet=0, plot_dist=0, **kwargs):
 
     return reg, scaler
 
-
-# MultiClass variant
-# class MLClassifierStrategy:
-#     def __init__(self, clf, feature_columns, scaler, min_confidence=0.0, window_size=0, reverse=False):
-#         # the sklearn classifier is already fitted to the data, we just store it here
-#         self.clf = clf
-#         self.feature_columns = feature_columns
-#         self.min_confidence = min_confidence
-#         self.scaler = scaler
-#         self.reverse = reverse
-#         self.window_size = window_size
-#
-#     def next(self, idx, data):
-#         if not hasattr(self, 'datafeats'):
-#             self.datafeats = data[self.feature_columns].values
-#
-#         # the current row is data[idx]
-#         # extract features for the previous row
-#         if scale_data:
-#             features = self.scaler.transform(self.datafeats[idx].reshape(1, -1))
-#         else:
-#             features = (self.datafeats[idx].reshape(1, -1))
-#
-#         # get the classifier prediction
-#         prediction = 0.5
-#         try:
-#             try:
-#                 prediction_proba = self.clf.predict_proba(features)
-#             except:
-#                 # AutoGluon prediction fix
-#                 prediction_proba = self.clf.predict_proba(pd.DataFrame(features)).values
-#
-#         except AttributeError:
-#             try:
-#                 prediction = self.clf.predict(data[self.feature_columns].iloc[idx])[0]
-#             except:
-#                 prediction = self.clf.predict(data[self.feature_columns].iloc[idx].values.reshape(1, -1))[0]
-#
-#             prediction_proba = None
-#
-#         if prediction_proba is not None:
-#             class_label = np.argmax(prediction_proba)
-#             conf = np.max(prediction_proba)
-#         else:
-#             class_label = prediction
-#             conf = np.abs(0.5 - prediction) * 2.0
-#
-#         if conf >= self.min_confidence:
-#             if not self.reverse:
-#                 if class_label == 0:
-#                     return 'buy', conf
-#                 elif class_label == 1:
-#                     return 'sell', conf
-#                 elif class_label == 2:
-#                     return 'none', conf
-#             else:
-#                 if class_label == 0:
-#                     return 'sell', conf
-#                 elif class_label == 1:
-#                     return 'buy', conf
-#                 elif class_label == 2:
-#                     return 'none', conf
-#         else:
-#             return 'none', conf
+def confidence_from_softmax(softmax_array):
+    num_classes = len(softmax_array)
+    max_value = np.max(softmax_array)
+    if max_value == 1/num_classes:
+        return 0.0
+    else:
+        confidence = 1 - (max_value - 1/num_classes) / (1 - 1/num_classes)
+        return confidence
 
 
 class MLClassifierStrategy:
@@ -791,10 +756,10 @@ class MLClassifierStrategy:
             features = features.reshape(1, self.window_size, -1)
             prediction_proba = self.clf.predict_proba(torch.tensor(features, dtype=torch.float32))
         else:
-            prediction_proba = self.clf.predict_proba(features)
+            prediction_proba = self.clf.predict_proba(features).reshape(-1)
 
         class_label = np.argmax(prediction_proba)
-        conf = np.max(prediction_proba)
+        conf = confidence_from_softmax(prediction_proba) #[class_label]
 
         if conf >= self.min_confidence:
             if not self.reverse:
