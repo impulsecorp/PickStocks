@@ -278,7 +278,7 @@ class LSTMBinaryClassifier(nn.Module):
 
 
 class RecurrentNetWrapper(BaseEstimator, ClassifierMixin):
-    def __init__(self, input_dim, hidden_dim, window_size, quiet=0,
+    def __init__(self, input_dim, hidden_dim, window_size, quiet=0, num_layers=2, dropout=0.5,
                  batch_size=32, learning_rate=1e-3, n_epochs=50, type='lstm', device='cpu'):
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -290,14 +290,18 @@ class RecurrentNetWrapper(BaseEstimator, ClassifierMixin):
         self.window_size = window_size
         self.scaler = Custom3DScaler()
         if type == 'lstm':
-            self.model = LSTMBinaryClassifier(input_dim, hidden_dim).to(device)
+            self.model = LSTMBinaryClassifier(input_dim, hidden_dim,
+                                              num_layers=num_layers, dropout=dropout).to(device)
         elif type == 'gru':
-            self.model = GRUBinaryClassifier(input_dim, hidden_dim).to(device)
+            self.model = GRUBinaryClassifier(input_dim, hidden_dim,
+                                             num_layers=num_layers, dropout=dropout).to(device)
         elif type == 'rnn':
-            self.model = RNNBinaryClassifier(input_dim, hidden_dim).to(device)
+            self.model = RNNBinaryClassifier(input_dim, hidden_dim,
+                                             num_layers=num_layers, dropout=dropout).to(device)
         else:
             # default is LSTM
-            self.model = LSTMBinaryClassifier(input_dim, hidden_dim).to(device)
+            self.model = LSTMBinaryClassifier(input_dim, hidden_dim,
+                                              num_layers=num_layers, dropout=dropout).to(device)
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
