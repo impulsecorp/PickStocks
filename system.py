@@ -608,7 +608,7 @@ def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_feat
     return ensemble, scaler
 
 
-def train_classifier(clf_class, data, quiet=0, time_window_size=0, **kwargs):
+def train_classifier(clf_class, data, quiet=0, time_window_size=1, **kwargs):
     if not quiet:
         print('Training', clf_class.__name__.split('.')[-1], '...', end=' ')
 
@@ -743,7 +743,7 @@ def train_regressor(reg_class, data, quiet=0, plot_dist=0, **kwargs):
 
 
 class MLClassifierStrategy:
-    def __init__(self, clf, feature_columns, scaler, min_confidence=0.0, window_size=0, reverse=False):
+    def __init__(self, clf, feature_columns, scaler, min_confidence=0.0, window_size=1, reverse=False):
         self.clf = clf
         self.feature_columns = feature_columns
         self.min_confidence = min_confidence
@@ -758,7 +758,7 @@ class MLClassifierStrategy:
         if idx < self.window_size:
             return 'none', 0
 
-        if self.window_size > 0:
+        if self.window_size > 1:
             start_idx = idx - self.window_size
             window_data = self.datafeats[start_idx:idx]
         else:
@@ -769,10 +769,11 @@ class MLClassifierStrategy:
         else:
             features = window_data
 
-        if self.window_size > 0:
+        if self.window_size > 1:
             features = features.reshape(1, self.window_size, -1)
-
-        prediction_proba = self.clf.predict_proba(torch.tensor(features, dtype=torch.float32))
+            prediction_proba = self.clf.predict_proba(torch.tensor(features, dtype=torch.float32))
+        else:
+            prediction_proba = self.clf.predict_proba(features)
 
         class_label = np.argmax(prediction_proba)
         conf = np.max(prediction_proba)
@@ -931,7 +932,7 @@ def compute_stats(data, trades):
                                          'exit_bar', 'entry_price', 'exit_price', 'profit'])
 
 
-def qbacktest(clf, scaler, data, quiet=0, reverse=False, window_size=0, **kwargs):
+def qbacktest(clf, scaler, data, quiet=0, reverse=False, window_size=1, **kwargs):
     s = MLClassifierStrategy(clf, list(data.filter(like='X')), scaler, window_size=window_size, reverse=reverse)
     equity, pf, trades = backtest_ml_strategy(s, data, quiet=quiet, **kwargs)
     if not quiet:
