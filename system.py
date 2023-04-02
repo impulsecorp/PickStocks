@@ -328,7 +328,7 @@ class RecurrentNetWrapper(BaseEstimator, ClassifierMixin):
 
                     # Compute accuracy
                     predicted = torch.argmax(outputs, 1)
-                    correct += (predicted == torch.argmax(batch_y)).sum().item()
+                    correct += (predicted == torch.argmax(batch_y, 1)).sum().item()
                     total += batch_y.size(0)
 
                 epoch_acc = correct / total
