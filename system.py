@@ -39,6 +39,10 @@ from deap import base, creator, tools, algorithms
 from joblib import Parallel, delayed
 from sklearn.model_selection import train_test_split
 from empyrical import sortino_ratio, omega_ratio, sharpe_ratio, calmar_ratio, stability_of_timeseries
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 
 def reseed():
     def seed_everything(s=0):
@@ -241,6 +245,17 @@ class LSTMBinaryClassifier(nn.Module):
         return out.squeeze()
 
 
+class Custom3DScaler():
+    def fit(self, X):
+        self.mean_ = X.mean(axis=(0, 1))
+        self.std_ = X.std(axis=(0, 1))
+
+    def transform(self, X):
+        return (X - self.mean_) / (self.std_ + 1e-8)
+
+    def inverse_transform(self, X):
+        return X * self.std_ + self.mean_
+
 
 class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
     def __init__(self, input_dim, hidden_dim, window_size, quiet=0,
@@ -253,7 +268,7 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
         self.device = device
         self.quiet = quiet
         self.window_size = window_size
-        # self.scaler = StandardScaler()
+        self.scaler = Custom3DScaler()
         if type == 'lstm':
             self.model = LSTMBinaryClassifier(input_dim, hidden_dim).to(device)
         elif type == 'gru':
@@ -265,6 +280,9 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
     def fit(self, X, y):
+        self.scaler.fit(X)
+        X = self.scaler.transform(X)
+
         X_train_tensor = torch.tensor(X, dtype=torch.float).to(self.device)
         y_train_tensor = torch.tensor(y, dtype=torch.float).view(-1, 1).to(self.device)
 
@@ -301,6 +319,7 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
         return self
 
     def predict_proba(self, X):
+        X = self.scaler.transform(X)
         X_test_tensor = torch.tensor(X, dtype=torch.float).to(self.device)
 
         self.model.eval()
@@ -311,13 +330,6 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
     def predict(self, X):
         proba = self.predict_proba(X)
         return (proba[:, 1] > 0.5).astype(int)
-
-
-# Define the 4-layer feed-forward neural network
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 
 class SelfAttention(nn.Module):
