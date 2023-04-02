@@ -363,7 +363,7 @@ class RecurrentNetEnsemble:
 
     def fit(self, X, y):
         for i,classifier in enumerate(self.classifiers):
-            print(f'Fitting net {i}...')
+            print(f'Fitting net {i+1}...')
             classifier.fit(X, y)
 
     def predict_proba(self, X):
@@ -371,6 +371,7 @@ class RecurrentNetEnsemble:
         for classifier in self.classifiers:
             probas += classifier.predict_proba(X)
         probas /= len(self.classifiers)
+        probas = np.exp(probas) / np.sum(np.exp(probas))
         return probas
 
     def predict(self, X):
