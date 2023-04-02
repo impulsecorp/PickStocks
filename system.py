@@ -209,22 +209,7 @@ def filter_trades_by_confidence(the_trades, min_conf=None, max_conf=None):
 
 
 
-class GRUBinaryClassifier(nn.Module):
-    def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
-        super(GRUBinaryClassifier, self).__init__()
 
-        self.gru = nn.GRU(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
-        self.fc = nn.Linear(hidden_dim, 1)
-        self.sigmoid = nn.Sigmoid()
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x):
-        gru_out, _ = self.gru(x)
-        gru_out = gru_out[:, -1]
-        gru_out = self.dropout(gru_out)
-        out = self.fc(gru_out)
-        out = self.sigmoid(out)
-        return out.squeeze()
 
 
 class Custom3DScaler():
@@ -239,22 +224,41 @@ class Custom3DScaler():
         return X * self.std_ + self.mean_
 
 
-# class LSTMBinaryClassifier(nn.Module):
-#     def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
-#         super(LSTMBinaryClassifier, self).__init__()
-#
-#         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
-#         self.fc = nn.Linear(hidden_dim, 1)
-#         self.sigmoid = nn.Sigmoid()
-#         self.dropout = nn.Dropout(dropout)
-#
-#     def forward(self, x):
-#         lstm_out, _ = self.lstm(x)
-#         lstm_out = lstm_out[:, -1]
-#         lstm_out = self.dropout(lstm_out)
-#         out = self.fc(lstm_out)
-#         out = self.sigmoid(out)
-#         return out.squeeze()
+class RNNBinaryClassifier(nn.Module):
+    def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
+        super(RNNBinaryClassifier, self).__init__()
+
+        self.rnn = nn.RNN(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
+        self.fc = nn.Linear(hidden_dim, 2)  # Change output dimension to 2
+        self.softmax = nn.Softmax(dim=1)  # Replace sigmoid with softmax
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        rnn_out, _ = self.rnn(x)
+        rnn_out = rnn_out[:, -1]
+        rnn_out = self.dropout(rnn_out)
+        out = self.fc(rnn_out)
+        out = self.softmax(out)  # Use softmax instead of sigmoid
+        return out
+
+
+class GRUBinaryClassifier(nn.Module):
+    def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
+        super(GRUBinaryClassifier, self).__init__()
+
+        self.gru = nn.GRU(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
+        self.fc = nn.Linear(hidden_dim, 2)  # Change output dimension to 2
+        self.softmax = nn.Softmax(dim=1)  # Replace sigmoid with softmax
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        gru_out, _ = self.gru(x)
+        gru_out = gru_out[:, -1]
+        gru_out = self.dropout(gru_out)
+        out = self.fc(gru_out)
+        out = self.softmax(out)  # Use softmax instead of sigmoid
+        return out
+
 
 class LSTMBinaryClassifier(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
@@ -274,7 +278,7 @@ class LSTMBinaryClassifier(nn.Module):
         return out
 
 
-class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
+class RecurrentNetWrapper(BaseEstimator, ClassifierMixin):
     def __init__(self, input_dim, hidden_dim, window_size, quiet=0,
                  batch_size=32, learning_rate=1e-3, n_epochs=50, type='lstm', device='cpu'):
         self.input_dim = input_dim
@@ -290,6 +294,8 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
             self.model = LSTMBinaryClassifier(input_dim, hidden_dim).to(device)
         elif type == 'gru':
             self.model = GRUBinaryClassifier(input_dim, hidden_dim).to(device)
+        elif type == 'rnn':
+            self.model = RNNBinaryClassifier(input_dim, hidden_dim).to(device)
         else:
             # default is LSTM
             self.model = LSTMBinaryClassifier(input_dim, hidden_dim).to(device)
@@ -316,14 +322,13 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
                 for batch_x, batch_y in train_loader:
                     self.optimizer.zero_grad()
                     outputs = self.model(batch_x)
-                    # batch_y = batch_y.squeeze(1) # Add an extra dimension to y to match the output shape
                     loss = self.criterion(outputs, batch_y.to(torch.float))
                     epoch_loss += loss.item()
                     loss.backward()
                     self.optimizer.step()
 
                     # Compute accuracy
-                    predicted = torch.argmax(outputs, 1)  # Get the class with the maximum probability
+                    predicted = torch.argmax(outputs, 1)
                     correct += (predicted == torch.argmax(batch_y)).sum().item()
                     total += batch_y.size(0)
 
@@ -336,14 +341,6 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
             print('Interrupted.')
         return self
 
-    # def predict_proba(self, X):
-    #     X = self.scaler.transform(X)
-    #     X_test_tensor = torch.tensor(X, dtype=torch.float).to(self.device)
-    #
-    #     self.model.eval()
-    #     with torch.no_grad():
-    #         outputs = self.model(X_test_tensor).cpu().numpy()
-    #     return np.hstack((1 - outputs, outputs))
     def predict_proba(self, X):
         X = self.scaler.transform(X)
         X_test_tensor = torch.tensor(X, dtype=torch.float).to(self.device)
@@ -352,6 +349,7 @@ class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
         with torch.no_grad():
             outputs = self.model(X_test_tensor).cpu().numpy().reshape(-1)
         return outputs
+
 
 class SelfAttention(nn.Module):
     def __init__(self, hidden_dim):
