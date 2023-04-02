@@ -109,7 +109,7 @@ dindex = None
 def procdata(ddd, 
              use_tsfel=True, dwinlen=60,
              use_forex=False, double_underscore=True,
-             cut_first_N=-1):
+             cut_first_N=-1, with_lagged=1):
     global data, dindex
 
     daily = ddd.daily
@@ -300,15 +300,15 @@ def procdata(ddd,
                         'X__Volume': 'Volume',
                         }, axis=1)
 
-    # lag all features except the raw prices
-
-    # Filter columns with the 'X' prefix
-    features = data.filter(like='X')
-    # Lag the features by one period
-    lagged_features = features.shift(1)
-    difference = features - lagged_features
-    for column in difference.columns:
-        data[f'{column}_lagged'] = difference[column]
+    if with_lagged:
+        # lag all features except the raw prices
+        # Filter columns with the 'X' prefix
+        features = data.filter(like='X')
+        # Lag the features by one period
+        lagged_features = features.shift(1)
+        difference = features - lagged_features
+        for column in difference.columns:
+            data[f'{column}_lagged'] = difference[column]
 
     data.daily = daily
     compute_custom_features(data, open_, high, low, close, uchar)
@@ -328,7 +328,8 @@ def procdata(ddd,
 
 
 
-def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
+def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1,
+                  with_lagged=1):
     global data, dindex
 
     daily = ddd.daily
@@ -405,15 +406,15 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1):
                         'X__Volume': 'Volume',
                         }, axis=1)
 
-    # lag all features except the raw prices
-
-    # Filter columns with the 'X' prefix
-    features = data.filter(like='X')
-    # Lag the features by one period
-    lagged_features = features.shift(1)
-    difference = features - lagged_features
-    for column in difference.columns:
-        data[f'{column}_lagged'] = difference[column]
+    if with_lagged:
+        # lag all features except the raw prices
+        # Filter columns with the 'X' prefix
+        features = data.filter(like='X')
+        # Lag the features by one period
+        lagged_features = features.shift(1)
+        difference = features - lagged_features
+        for column in difference.columns:
+            data[f'{column}_lagged'] = difference[column]
 
     data.daily = daily
     compute_custom_features(data, open_, high, low, close, uchar)
