@@ -200,16 +200,12 @@ def filter_trades_by_confidence(the_trades, min_conf=None, max_conf=None):
     if (min_conf is None) and (max_conf is None):
         return trs
     elif (min_conf is not None) and (max_conf is None):
-        return trs.loc[(np.abs(0.5 - trs['pred'].values) * 2.0) >= min_conf]
+        return trs.loc[(np.abs(0.5 - trs['conf'].values) * 2.0) >= min_conf]
     elif (min_conf is None) and (max_conf is not None):
-        return trs.loc[(np.abs(0.5 - trs['pred'].values) * 2.0) <= max_conf]
+        return trs.loc[(np.abs(0.5 - trs['conf'].values) * 2.0) <= max_conf]
     else:
-        return trs.loc[((np.abs(0.5 - trs['pred'].values) * 2.0) >= min_conf) & (
-                (np.abs(0.5 - trs['pred'].values) * 2.0) <= max_conf)]
-
-
-
-
+        return trs.loc[((np.abs(0.5 - trs['conf'].values) * 2.0) >= min_conf) & (
+                (np.abs(0.5 - trs['conf'].values) * 2.0) <= max_conf)]
 
 
 class Custom3DScaler():
@@ -228,7 +224,8 @@ class RNNBinaryClassifier(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
         super(RNNBinaryClassifier, self).__init__()
 
-        self.rnn = nn.RNN(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
+        self.rnn = nn.RNN(input_dim, hidden_dim, num_layers=num_layers, batch_first=True,
+                          dropout=dropout if num_layers > 1 else 0)
         self.fc = nn.Linear(hidden_dim, 2)  # Change output dimension to 2
         self.softmax = nn.Softmax(dim=1)  # Replace sigmoid with softmax
         self.dropout = nn.Dropout(dropout)
@@ -246,7 +243,8 @@ class GRUBinaryClassifier(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
         super(GRUBinaryClassifier, self).__init__()
 
-        self.gru = nn.GRU(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
+        self.gru = nn.GRU(input_dim, hidden_dim, num_layers=num_layers, batch_first=True,
+                          dropout=dropout if num_layers > 1 else 0)
         self.fc = nn.Linear(hidden_dim, 2)  # Change output dimension to 2
         self.softmax = nn.Softmax(dim=1)  # Replace sigmoid with softmax
         self.dropout = nn.Dropout(dropout)
@@ -264,7 +262,8 @@ class LSTMBinaryClassifier(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
         super(LSTMBinaryClassifier, self).__init__()
 
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True,
+                            dropout=dropout if num_layers > 1 else 0)
         self.fc = nn.Linear(hidden_dim, 2)  # Change output dimension to 2
         self.softmax = nn.Softmax(dim=1)  # Replace sigmoid with softmax
         self.dropout = nn.Dropout(dropout)
@@ -404,7 +403,8 @@ class BinaryClassifier(nn.Module):
 
         x = self.self_attention(x)
 
-        for linear, batch_norm, relu, dropout in zip(self.linear_layers, self.batch_norm_layers, self.relu_layers, self.dropout_layers):
+        for linear, batch_norm, relu, dropout in zip(self.linear_layers, self.batch_norm_layers, self.relu_layers,
+                                                     self.dropout_layers):
             x = linear(x)
             x = batch_norm(x)
             x = relu(x)
@@ -416,7 +416,7 @@ class BinaryClassifier(nn.Module):
 
 
 # Define the PyTorch wrapper to behave like an sklearn classifier
-class PyTorchClassifierWrapper(BaseEstimator, ClassifierMixin):
+class NeuralNetClassifierWrapper(BaseEstimator, ClassifierMixin):
     def __init__(self, input_dim, hidden_dim, quiet=0, dropout_prob=0.5, num_layers=2,
                  batch_size=32, learning_rate=1e-3, n_epochs=50, device='cpu'):
         self.input_dim = input_dim
@@ -553,6 +553,8 @@ class SymbolicRegressionClassifier(BaseEstimator, ClassifierMixin):
 
 bestsofar = None
 bestsofar_score = None
+
+
 def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=120, test_size=0.2, **kwargs):
     global bestsofar, bestsofar_score
     defaults = model_class(**kwargs).get_params()
@@ -561,7 +563,7 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
     bestsofar = deepcopy(defaults)
     bestsofar_score = -99999.0
 
-    def sanitize(p): # because some classifiers are picky about the numeric types of parameters
+    def sanitize(p):  # because some classifiers are picky about the numeric types of parameters
         toints = ['n_estimators', 'num_leaves', 'max_depth', 'min_child_samples', 'num_iterations']
         for ti in toints:
             if ti in p:
@@ -613,11 +615,11 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
     return best
 
 
-
 def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_features=0.8, quiet=0, **kwargs):
     clfs = []
     if not quiet:
-        print(f'Training ensemble: {ensemble_size} classifiers of type {clf_class.__name__.split(".")[-1]}... ', end=' ')
+        print(f'Training ensemble: {ensemble_size} classifiers of type {clf_class.__name__.split(".")[-1]}... ',
+              end=' ')
     for i in range(ensemble_size):
         try:
             clf = clf_class(random_state=newseed(), **kwargs)
@@ -641,7 +643,8 @@ def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_feat
     # Train ensemble on training data
     ensemble.fit(X_train, y_train)
     if not quiet:
-        print(f'Done. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
+        print(
+            f'Done. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
     return ensemble, scaler
 
 
@@ -713,13 +716,14 @@ def train_regressor(reg_class, data, quiet=0, plot_dist=0, **kwargs):
 
     return reg, scaler
 
+
 def confidence_from_softmax(softmax_array):
     num_classes = len(softmax_array)
     max_value = np.max(softmax_array)
-    if max_value == 1/num_classes:
+    if max_value == 1 / num_classes:
         return 0.0
     else:
-        confidence = 1 - (max_value - 1/num_classes) / (1 - 1/num_classes)
+        confidence = 1 - (max_value - 1 / num_classes) / (1 - 1 / num_classes)
         return confidence
 
 
@@ -757,7 +761,7 @@ class MLClassifierStrategy:
             prediction_proba = self.clf.predict_proba(features).reshape(-1)
 
         class_label = np.argmax(prediction_proba)
-        conf = confidence_from_softmax(prediction_proba) #[class_label]
+        conf = confidence_from_softmax(prediction_proba)  # [class_label]
 
         if conf >= self.min_confidence:
             if not self.reverse:
@@ -776,7 +780,6 @@ class MLClassifierStrategy:
                     return 'none', conf
         else:
             return 'none', conf
-
 
 
 class MLRegressorStrategy:
@@ -849,7 +852,7 @@ def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
         if (idx > int(val_set_end * len(data))) and skip_test:
             continue
 
-        action, prediction = strategy.next(idx, data)
+        action, confidence = strategy.next(idx, data)
 
         entry_price = data.iloc[idx]['Open']
         exit_price = data.iloc[idx]['Close']
@@ -870,7 +873,7 @@ def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
         if action != 'none':
             trades.append({
                 'pos': action,
-                'pred': prediction,
+                'conf': confidence,
                 'shares': shares,
                 'entry_datetime': data.index[idx],
                 'exit_datetime': data.index[idx],
@@ -922,6 +925,7 @@ def qbacktest(clf, scaler, data, quiet=0, reverse=False, window_size=1, **kwargs
         plt.ylabel('Profit')
         print(f'Profit factor: {pf:.5f}, Winners: {get_winner_pct(trades):.2f}%, Trades: {len(trades)}')
     return equity, pf, trades
+
 
 def rbacktest(reg, scaler, data, quiet=0, reverse=False, **kwargs):
     s = MLRegressorStrategy(reg, list(data.filter(like='X')), scaler, reverse=reverse)
@@ -1088,7 +1092,7 @@ def get_y(data):
         return y
     else:
         if not multiclass:
-            y = ((data.Close - data.Open) < 0).astype(np.int32) # False = 0, so class 0, True = 1, so class 1
+            y = ((data.Close - data.Open) < 0).astype(np.int32)  # False = 0, so class 0, True = 1, so class 1
             return y
         else:
             move = (data.Close - data.Open).astype(np.float32)
@@ -1129,6 +1133,7 @@ def get_X_3d(data, window_size):
         X.append(values[i:i + window_size])
     return np.array(X)
 
+
 def get_y_3d(data, window_size):
     """ Return dependent variable y """
     if regression:
@@ -1136,7 +1141,7 @@ def get_y_3d(data, window_size):
         return y[window_size - 1:]
     else:
         if not multiclass:
-            y = ((data.Close - data.Open) < 0).astype(np.int32) # False = 0, so class 0, True = 1, so class 1
+            y = ((data.Close - data.Open) < 0).astype(np.int32)  # False = 0, so class 0, True = 1, so class 1
             return y[window_size - 1:]
         else:
             move = (data.Close - data.Open).astype(np.float32)
@@ -1148,6 +1153,7 @@ def get_y_3d(data, window_size):
             y[np.abs(move) < multiclass_move_threshold] = 2  # Class 2: 'do nothing'
 
             return y[window_size - 1:]
+
 
 def get_clean_Xy_3d(df, window_size):
     """Return (X, y) cleaned of NaN values"""
@@ -1463,6 +1469,7 @@ def common_rows(dataframes):
     # return the resulting dataframe
     return merged_df
 
+
 def combined_trades(alltrades, combine_method='or'):
     if combine_method == 'or':
         return pd.concat(alltrades, axis=0).drop_duplicates().sort_index()
@@ -1478,7 +1485,7 @@ def compute_feature_matrix(data, base_trades, bins='doane', min_pf=0.1, min_trad
         d = data[featformat(fn)].values
         hd = np.histogram(d, bins=bins)[1]
         if len(hd) > len(np.unique(d)):
-            feat_bins.append(np.linspace(np.min(d), np.max(d), len(np.unique(d))+1))
+            feat_bins.append(np.linspace(np.min(d), np.max(d), len(np.unique(d)) + 1))
         else:
             feat_bins.append(hd)
     pf_matrix = []
@@ -1486,18 +1493,20 @@ def compute_feature_matrix(data, base_trades, bins='doane', min_pf=0.1, min_trad
     wn_matrix = []
     coords = []
     for row_idx, (fname, bins) in enumerate(zip(tqdm(feature_names), feat_bins)):
-        for col_idx in range(1,len(bins)):
-            if bins[col_idx-1] > bins[col_idx]:
-                bs = bins[col_idx], bins[col_idx-1]
+        for col_idx in range(1, len(bins)):
+            if bins[col_idx - 1] > bins[col_idx]:
+                bs = bins[col_idx], bins[col_idx - 1]
             else:
-                bs = bins[col_idx-1], bins[col_idx]
-            pf, ntrades = compute_stats(data, filter_trades_by_feature(base_trades, data, featformat(fname), min_value=bs[0], max_value=bs[1]))
+                bs = bins[col_idx - 1], bins[col_idx]
+            pf, ntrades = compute_stats(data,
+                                        filter_trades_by_feature(base_trades, data, featformat(fname), min_value=bs[0],
+                                                                 max_value=bs[1]))
             if (pf != -1) and (len(ntrades) > 0):
                 pf_matrix.append(pf)
                 nt_matrix.append(len(ntrades))
                 wn_matrix.append(get_winner_pct(ntrades))
                 coords.append((row_idx, col_idx))
-    zpd = sorted(list(zip(pf_matrix, nt_matrix, wn_matrix, coords)), key = lambda x: x[2], reverse=True)
+    zpd = sorted(list(zip(pf_matrix, nt_matrix, wn_matrix, coords)), key=lambda x: x[2], reverse=True)
     top_pfs = []
     top_nts = []
     top_wns = []
@@ -1512,9 +1521,9 @@ def compute_feature_matrix(data, base_trades, bins='doane', min_pf=0.1, min_trad
             top_wns.append(wn)
             fbins.append(coords[1])
             fbins_lens.append(len(feat_bins[coords[0]]))
-            fnames.append( feature_names[coords[0]] )
+            fnames.append(feature_names[coords[0]])
             if topn is None:
-                all_coords.append( coords )
+                all_coords.append(coords)
             elif (topn > 0) and (len(all_coords) < topn):
                 all_coords.append(coords)
     return (all_coords, feature_names, feat_bins,
@@ -1535,7 +1544,7 @@ def get_genome_alltrades_nonbinned(data, genome, base_trades, feature_names, com
     alltrades = []
     for i in range(len(genome)):
         try:
-            r,c,d,a = genome[i]
+            r, c, d, a = genome[i]
             if d == 'above':
                 _, mtrades = compute_stats(data,
                                            filter_trades_by_feature(base_trades, data,
@@ -1567,11 +1576,11 @@ def get_genome_alltrades_binned(data, genome, base_trades, feature_names, feat_b
     alltrades = []
     for i in range(len(genome)):
         try:
-            r,c = genome[i]
+            r, c = genome[i]
             _, mtrades = compute_stats(data,
                                        filter_trades_by_feature(base_trades, data,
                                                                 featformat(feature_names[r]),
-                                                                min_value=feat_bins[r][c-1],
+                                                                min_value=feat_bins[r][c - 1],
                                                                 max_value=feat_bins[r][c]))
             alltrades.append(mtrades)
         except Exception as ex:
@@ -1591,10 +1600,9 @@ def fitness_function(alltrades, objectives, eval_min_trades=10, worst_possible_f
         return tuple([worst_possible_fitness] * len(objectives))
 
 
-
 def run_evolution(pop_size, toolbox, num_generations, survival_rate,
                   crossover_prob, mutation_prob, objectives, worst_possible_fitness,
-                  target_score = None, parallel = True, quiet=0):
+                  target_score=None, parallel=True, quiet=0):
     weights = np.array([x[1] for x in objectives])
     # Create initial population
     pop = toolbox.population(n=pop_size)
@@ -1628,7 +1636,7 @@ def run_evolution(pop_size, toolbox, num_generations, survival_rate,
         ittt = range(1, num_generations + 1) if (target_score is None) else range(1, 100000000)
         for gen in ittt:
 
-            selected = toolbox.select(pop, int(len(pop)*survival_rate))
+            selected = toolbox.select(pop, int(len(pop) * survival_rate))
             offspring = []
 
             while len(offspring) < len(pop):
@@ -1637,9 +1645,9 @@ def run_evolution(pop_size, toolbox, num_generations, survival_rate,
 
                 if rnd.random() < crossover_prob:
                     try:
-                        toolbox.mate(child1, child2) # single/twopoint
+                        toolbox.mate(child1, child2)  # single/twopoint
                     except:
-                        toolbox.mate(child1, child2, 0.5) # uniform
+                        toolbox.mate(child1, child2, 0.5)  # uniform
                     del child1.fitness.values
                     del child2.fitness.values
 
@@ -1698,14 +1706,18 @@ def run_evolution(pop_size, toolbox, num_generations, survival_rate,
 # Test utilities
 
 from scipy import stats
+
+
 def get_corr_info(x, y, plot=1):
     slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
-    print(f'slope: {slope}, intercept: {intercept}, determ. coeff: {r_value**2}, p={p_value}')
+    print(f'slope: {slope}, intercept: {intercept}, determ. coeff: {r_value ** 2}, p={p_value}')
     if plot:
         plt.plot(x, y, 'o', label='original data')
-        plt.plot(x, intercept + slope*x, 'r', label='fitted line')
+        plt.plot(x, intercept + slope * x, 'r', label='fitted line')
         plt.legend()
         plt.show()
+
+
 def testloop(num_iters, runner):
     pf_datapoints = []
     pr_datapoints = []
@@ -1737,4 +1749,3 @@ def testloop(num_iters, runner):
         print('bs val / profit test')
         get_corr_info(bsval, prstest, plot=0)
     return bs_datapoints, pf_datapoints, pr_datapoints, wn_datapoints
-
