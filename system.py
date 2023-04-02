@@ -614,7 +614,7 @@ def train_classifier(clf_class, data, quiet=0, time_window_size=1, **kwargs):
 
     try:
         clf = clf_class(quiet=quiet, **kwargs)
-    except:
+    except Exception as ex:
         clf = clf_class(**kwargs)
 
     N_TRAIN = int(data.shape[0] * train_set_end)
