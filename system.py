@@ -220,9 +220,9 @@ class Custom3DScaler():
         return X * self.std_ + self.mean_
 
 
-class RNNBinaryClassifier(nn.Module):
+class RnnNet(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
-        super(RNNBinaryClassifier, self).__init__()
+        super(RnnNet, self).__init__()
 
         self.rnn = nn.RNN(input_dim, hidden_dim, num_layers=num_layers, batch_first=True,
                           dropout=dropout if num_layers > 1 else 0)
@@ -239,9 +239,9 @@ class RNNBinaryClassifier(nn.Module):
         return out
 
 
-class GRUBinaryClassifier(nn.Module):
+class GruNet(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
-        super(GRUBinaryClassifier, self).__init__()
+        super(GruNet, self).__init__()
 
         self.gru = nn.GRU(input_dim, hidden_dim, num_layers=num_layers, batch_first=True,
                           dropout=dropout if num_layers > 1 else 0)
@@ -258,9 +258,9 @@ class GRUBinaryClassifier(nn.Module):
         return out
 
 
-class LSTMBinaryClassifier(nn.Module):
+class LstmNet(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
-        super(LSTMBinaryClassifier, self).__init__()
+        super(LstmNet, self).__init__()
 
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True,
                             dropout=dropout if num_layers > 1 else 0)
@@ -285,23 +285,26 @@ class RecurrentNetWrapper(BaseEstimator, ClassifierMixin):
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.n_epochs = n_epochs
+        self.num_layers=num_layers
+        self.dropout = dropout
+        self.type = type
         self.device = device
         self.quiet = quiet
         self.window_size = window_size
         self.scaler = Custom3DScaler()
         if type == 'lstm':
-            self.model = LSTMBinaryClassifier(input_dim, hidden_dim,
-                                              num_layers=num_layers, dropout=dropout).to(device)
+            self.model = LstmNet(input_dim, hidden_dim,
+                                 num_layers=self.num_layers, dropout=self.dropout).to(device)
         elif type == 'gru':
-            self.model = GRUBinaryClassifier(input_dim, hidden_dim,
-                                             num_layers=num_layers, dropout=dropout).to(device)
+            self.model = GruNet(input_dim, hidden_dim,
+                                num_layers=self.num_layers, dropout=self.dropout).to(device)
         elif type == 'rnn':
-            self.model = RNNBinaryClassifier(input_dim, hidden_dim,
-                                             num_layers=num_layers, dropout=dropout).to(device)
+            self.model = RnnNet(input_dim, hidden_dim,
+                                num_layers=self.num_layers, dropout=self.dropout).to(device)
         else:
             # default is LSTM
-            self.model = LSTMBinaryClassifier(input_dim, hidden_dim,
-                                              num_layers=num_layers, dropout=dropout).to(device)
+            self.model = LstmNet(input_dim, hidden_dim,
+                                 num_layers=self.num_layers, dropout=self.dropout).to(device)
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
@@ -352,6 +355,27 @@ class RecurrentNetWrapper(BaseEstimator, ClassifierMixin):
         with torch.no_grad():
             outputs = self.model(X_test_tensor).cpu().numpy().reshape(-1)
         return outputs
+
+
+class RecurrentNetEnsemble:
+    def __init__(self, n_classifiers, *args, **kwargs):
+        self.classifiers = [RecurrentNetWrapper(*args, **kwargs) for _ in range(n_classifiers)]
+
+    def fit(self, X, y):
+        for i,classifier in enumerate(self.classifiers):
+            print(f'Fitting net {i}...')
+            classifier.fit(X, y)
+
+    def predict_proba(self, X):
+        probas = np.zeros((X.shape[0], 2))
+        for classifier in self.classifiers:
+            probas += classifier.predict_proba(X)
+        probas /= len(self.classifiers)
+        return probas
+
+    def predict(self, X):
+        probas = self.predict_proba(X)
+        return np.argmax(probas, axis=1)
 
 
 class SelfAttention(nn.Module):
@@ -619,7 +643,8 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
     return best
 
 
-def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_features=0.8, quiet=0, **kwargs):
+def train_ensemble(clf_class, data, ensemble_size=100, time_window_size=1, n_jobs=-1,
+                   max_samples=0.8, max_features=0.8, quiet=0, **kwargs):
     clfs = []
     if not quiet:
         print(f'Training ensemble: {ensemble_size} classifiers of type {clf_class.__name__.split(".")[-1]}... ',
@@ -632,23 +657,29 @@ def train_ensemble(clf_class, data, ensemble_size=100, max_samples=0.8, max_feat
         clfs.append((f'clf_{i}', clf))
     N_TRAIN = int(data.shape[0] * train_set_end)
     df = data.iloc[0:N_TRAIN]
-    X_train, y_train = get_clean_Xy(df)
-    scaler = StandardScaler()
-    if scale_data:
-        X_train = scaler.fit_transform(X_train)
-    if balance_data:
+    if time_window_size > 1:
+        X, y = get_clean_Xy_3d(df, time_window_size)
+    else:
+        X, y = get_clean_Xy(df)
+    scaler = None
+    if scale_data and not (time_window_size > 1):
+        scaler = StandardScaler()
+        Xt = scaler.fit_transform(X)
+    else:
+        Xt = X
+    if balance_data and not (time_window_size > 1):
         # Apply SMOTE oversampling to balance the training data
         sm = SMOTE(random_state=newseed())
-        X_train, y_train = sm.fit_resample(X_train, y_train)
+        Xt, y = sm.fit_resample(Xt, y)
+
     # Create ensemble classifier
     ensemble = BaggingClassifier(estimator=clf, n_estimators=ensemble_size,
                                  max_samples=max_samples, max_features=max_features,
-                                 oob_score=True, random_state=newseed(), n_jobs=-1)
+                                 oob_score=True, random_state=newseed(), n_jobs=n_jobs)
     # Train ensemble on training data
-    ensemble.fit(X_train, y_train)
+    ensemble.fit(Xt, y)
     if not quiet:
-        print(
-            f'Done. Mean CV score: {np.mean(cross_val_score(ensemble, X_train, y_train, cv=cv_folds, scoring="accuracy")):.5f}')
+        print(f'Done. Mean CV score: {np.mean(cross_val_score(ensemble, Xt, y, cv=cv_folds, scoring="accuracy")):.5f}')
     return ensemble, scaler
 
 
@@ -765,7 +796,7 @@ class MLClassifierStrategy:
             prediction_proba = self.clf.predict_proba(features).reshape(-1)
 
         class_label = np.argmax(prediction_proba)
-        conf = confidence_from_softmax(prediction_proba)  # [class_label]
+        conf = confidence_from_softmax(prediction_proba)
 
         if conf >= self.min_confidence:
             if not self.reverse:
@@ -918,8 +949,9 @@ def compute_stats(data, trades):
                                          'exit_bar', 'entry_price', 'exit_price', 'profit'])
 
 
-def qbacktest(clf, scaler, data, quiet=0, reverse=False, window_size=1, **kwargs):
-    s = MLClassifierStrategy(clf, list(data.filter(like='X')), scaler, window_size=window_size, reverse=reverse)
+def qbacktest(clf, scaler, data, quiet=0, reverse=False, window_size=1, min_confidence=0.0, **kwargs):
+    s = MLClassifierStrategy(clf, list(data.filter(like='X')), scaler, min_confidence=min_confidence,
+                             window_size=window_size, reverse=reverse)
     equity, pf, trades = backtest_ml_strategy(s, data, quiet=quiet, **kwargs)
     if not quiet:
         plt.plot(equity)
