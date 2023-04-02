@@ -367,7 +367,7 @@ class RecurrentNetEnsemble:
             classifier.fit(X, y)
 
     def predict_proba(self, X):
-        probas = np.zeros((X.shape[0], 2))
+        probas = np.zeros((X.shape[0], 2)).reshape(-1)
         for classifier in self.classifiers:
             probas += classifier.predict_proba(X)
         probas /= len(self.classifiers)
