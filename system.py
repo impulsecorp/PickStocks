@@ -206,34 +206,40 @@ def filter_trades_by_confidence(the_trades, min_conf=None, max_conf=None):
 
 
 class GRUBinaryClassifier(nn.Module):
-    def __init__(self, input_dim, hidden_dim):
+    def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
         super(GRUBinaryClassifier, self).__init__()
 
-        self.gru = nn.GRU(input_dim, hidden_dim, batch_first=True)
+        self.gru = nn.GRU(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
         self.fc = nn.Linear(hidden_dim, 1)
         self.sigmoid = nn.Sigmoid()
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         gru_out, _ = self.gru(x)
-        gru_out = gru_out[:, -1]  # only take the last output of the sequence
+        gru_out = gru_out[:, -1]
+        gru_out = self.dropout(gru_out)
         out = self.fc(gru_out)
         out = self.sigmoid(out)
         return out.squeeze()
 
+
 class LSTMBinaryClassifier(nn.Module):
-    def __init__(self, input_dim, hidden_dim):
+    def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.5):
         super(LSTMBinaryClassifier, self).__init__()
 
-        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True)
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout if num_layers > 1 else 0)
         self.fc = nn.Linear(hidden_dim, 1)
         self.sigmoid = nn.Sigmoid()
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         lstm_out, _ = self.lstm(x)
-        lstm_out = lstm_out[:, -1]  # only take the last output of the sequence
+        lstm_out = lstm_out[:, -1] 
+        lstm_out = self.dropout(lstm_out)
         out = self.fc(lstm_out)
         out = self.sigmoid(out)
-        return out.squeeze()  # squeeze the output tensor to remove extra dimensions
+        return out.squeeze()
+
 
 
 class PyTorchLSTMWrapper(BaseEstimator, ClassifierMixin):
