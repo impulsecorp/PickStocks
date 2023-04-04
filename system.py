@@ -790,14 +790,19 @@ class MLClassifierStrategy:
         else:
             features = window_data
 
-        if self.window_size > 1:
-            features = features.reshape(1, self.window_size, -1)
-            prediction_proba = self.clf.predict_proba(torch.tensor(features, dtype=torch.float32))
-        else:
-            prediction_proba = self.clf.predict_proba(features).reshape(-1)
+        try:
+            if self.window_size > 1:
+                features = features.reshape(1, self.window_size, -1)
+                prediction_proba = self.clf.predict_proba(torch.tensor(features, dtype=torch.float32))
+            else:
+                prediction_proba = self.clf.predict_proba(features).reshape(-1)
 
-        class_label = np.argmax(prediction_proba)
-        conf = confidence_from_softmax(prediction_proba)
+            class_label = np.argmax(prediction_proba)
+            conf = confidence_from_softmax(prediction_proba)
+        except:
+            class_label = self.clf.predict(features).reshape(-1)
+            conf = 1.0
+
 
         if conf >= self.min_confidence:
             if not self.reverse:
