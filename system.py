@@ -795,7 +795,10 @@ class MLClassifierStrategy:
                 features = features.reshape(1, self.window_size, -1)
                 prediction_proba = self.clf.predict_proba(torch.tensor(features, dtype=torch.float32))
             else:
-                prediction_proba = self.clf.predict_proba(features).reshape(-1)
+                try:
+                    prediction_proba = self.clf.predict_proba(features).reshape(-1)
+                except:
+                    prediction_proba = self.clf.predict_proba(pd.DataFrame(features.reshape(1,-1))).values[0]#
 
             class_label = np.argmax(prediction_proba)
             conf = confidence_from_softmax(prediction_proba)
