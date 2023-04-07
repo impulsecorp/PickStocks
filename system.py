@@ -644,8 +644,8 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
     return best
 
 
-def train_ensemble(clf_class, data, ensemble_size=100, time_window_size=1, n_jobs=-1,
-                   max_samples=0.8, max_features=0.8, quiet=0, **kwargs):
+def train_clf_ensemble(clf_class, data, ensemble_size=100, time_window_size=1, n_jobs=-1,
+                       max_samples=0.8, max_features=0.8, quiet=0, **kwargs):
     clfs = []
     if not quiet:
         print(f'Training ensemble: {ensemble_size} classifiers of type {clf_class.__name__.split(".")[-1]}... ',
