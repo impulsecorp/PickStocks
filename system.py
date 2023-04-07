@@ -717,7 +717,7 @@ def train_reg_ensemble(reg_classes, data, ensemble_size=1, time_window_size=1, n
     else:
         Xt = X
     # Create ensemble regressor
-    ensemble = VotingClassifier(estimators=regs, n_jobs=n_jobs)
+    ensemble = VotingRegressor(estimators=regs, n_jobs=n_jobs)
     # Train ensemble on training data
     ensemble.fit(Xt, y)
     if not quiet:
