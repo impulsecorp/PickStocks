@@ -42,7 +42,9 @@ from empyrical import sortino_ratio, omega_ratio, sharpe_ratio, calmar_ratio, st
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import uuid
 
+def uuname(): return str(uuid.uuid4()).replace('-','')[0:12]
 
 def reseed():
     def seed_everything(s=0):
@@ -644,18 +646,22 @@ def optimize_model(model_class, model_name, space, X_train, y_train, max_evals=1
     return best
 
 
-def train_clf_ensemble(clf_class, data, ensemble_size=100, time_window_size=1, n_jobs=-1,
-                       max_samples=0.8, max_features=0.8, quiet=0, **kwargs):
+def train_clf_ensemble(clf_classes, data, ensemble_size=1, time_window_size=1, n_jobs=-1, quiet=0, **kwargs):
+
+    if not isinstance(clf_classes, list):
+        clf_classes = [clf_classes]
+
     clfs = []
     if not quiet:
-        print(f'Training ensemble: {ensemble_size} classifiers of type {clf_class.__name__.split(".")[-1]}... ',
-              end=' ')
-    for i in range(ensemble_size):
-        try:
-            clf = clf_class(random_state=newseed(), **kwargs)
-        except:
-            clf = clf_class(**kwargs)
-        clfs.append((f'clf_{i}', clf))
+        print(f'Training ensemble: {ensemble_size} classifiers... ', end=' ')
+    for enss in range(ensemble_size):
+        for i, clf_class in enumerate(clf_classes):
+            try:
+                clf = clf_class(random_state=newseed(), **kwargs)
+            except:
+                clf = clf_class(**kwargs)
+            clfs.append((f'clf_{uuname()}', clf))
+
     N_TRAIN = int(data.shape[0] * train_set_end)
     df = data.iloc[0:N_TRAIN]
     if time_window_size > 1:
@@ -674,13 +680,49 @@ def train_clf_ensemble(clf_class, data, ensemble_size=100, time_window_size=1, n
         Xt, y = sm.fit_resample(Xt, y)
 
     # Create ensemble classifier
-    ensemble = BaggingClassifier(estimator=clf, n_estimators=ensemble_size,
-                                 max_samples=max_samples, max_features=max_features,
-                                 oob_score=True, random_state=newseed(), n_jobs=n_jobs)
+    ensemble = VotingClassifier(estimators=clfs, n_jobs=n_jobs)
     # Train ensemble on training data
     ensemble.fit(Xt, y)
     if not quiet:
         print(f'Done. Mean CV score: {np.mean(cross_val_score(ensemble, Xt, y, cv=cv_folds, scoring="accuracy")):.5f}')
+    return ensemble, scaler
+
+
+def train_reg_ensemble(reg_classes, data, ensemble_size=1, time_window_size=1, n_jobs=-1, quiet=0, **kwargs):
+
+    if not isinstance(reg_classes, list):
+        reg_classes = [reg_classes]
+
+    regs = []
+    if not quiet:
+        print(f'Training ensemble: {ensemble_size} classifiers... ', end=' ')
+    for enss in range(ensemble_size):
+        for i, reg_class in enumerate(reg_classes):
+            try:
+                reg = reg_class(random_state=newseed(), **kwargs)
+            except:
+                reg = reg_class(**kwargs)
+            regs.append((f'clf_{uuname()}', reg))
+
+    N_TRAIN = int(data.shape[0] * train_set_end)
+    df = data.iloc[0:N_TRAIN]
+    if time_window_size > 1:
+        X, y = get_clean_Xy_3d(df, time_window_size)
+    else:
+        X, y = get_clean_Xy(df)
+    scaler = None
+    if scale_data and not (time_window_size > 1):
+        scaler = StandardScaler()
+        Xt = scaler.fit_transform(X)
+    else:
+        Xt = X
+    # Create ensemble regressor
+    ensemble = VotingClassifier(estimators=regs, n_jobs=n_jobs)
+    # Train ensemble on training data
+    ensemble.fit(Xt, y)
+    if not quiet:
+        print(f'Done.')
+
     return ensemble, scaler
 
 
