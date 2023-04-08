@@ -680,7 +680,7 @@ def train_clf_ensemble(clf_classes, data, ensemble_size=1, time_window_size=1, n
         Xt, y = sm.fit_resample(Xt, y)
 
     # Create ensemble classifier
-    ensemble = VotingClassifier(estimators=clfs, n_jobs=n_jobs)
+    ensemble = VotingClassifier(estimators=clfs, n_jobs=n_jobs, voting='soft')
     # Train ensemble on training data
     ensemble.fit(Xt, y)
     if not quiet:
