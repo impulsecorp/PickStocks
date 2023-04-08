@@ -12,3 +12,4 @@ lightgbm
 gplearn
 imbalanced-learn
 deap
+dask
