@@ -455,10 +455,12 @@ class NeuralNetClassifierWrapper(BaseEstimator, ClassifierMixin):
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.n_epochs = n_epochs
+        self.dropout_prob = dropout_prob
+        self.num_layers = num_layers
         self.device = device
         self.scaler = StandardScaler()
         self.model = BinaryClassifier(input_dim, hidden_dim,
-                                      dropout_prob=dropout_prob, num_layers=num_layers).to(device)
+                                      dropout_prob=self.dropout_prob, num_layers=self.num_layers).to(device)
         self.criterion = nn.BCELoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         self.quiet = quiet
