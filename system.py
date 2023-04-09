@@ -916,8 +916,8 @@ market_start_time = pd.Timestamp("09:30:00").time()
 market_end_time = pd.Timestamp("16:00:00").time()
 
 
-def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
-                         commission=0.0, slippage=0.0, position_value=100000, quiet=0):
+def backtest_strategy_single(strategy, data, skip_train=1, skip_val=0, skip_test=1,
+                             commission=0.0, slippage=0.0, position_value=100000, quiet=0):
     equity_curve = np.zeros(len(data))
     trades = []
     current_profit = 0
@@ -975,6 +975,74 @@ def backtest_ml_strategy(strategy, data, skip_train=1, skip_val=0, skip_test=1,
     return equity_curve, *compute_stats(data, trades)
 
 
+def backtest_strategy_multi(strategy, data_list, skip_train=1, skip_val=0, skip_test=1,
+                             commission=0.0, slippage=0.0, position_value=100000, quiet=0):
+
+    # data integrity check
+    assert all([x.shape == data_list[0].shape for x in data_list])
+    assert all([x.index[0] == data_list[0].index[0] for x in data_list])
+    assert all([x.index[-1] == data_list[0].index[-1] for x in data_list])
+
+    datalen = len(data_list[0])
+
+    all_equity_curves = [np.zeros(datalen) for _ in range(len(data_list))]
+    all_trades = [[] for _ in range(len(data_list))]
+    all_current_profits = [0 for _ in range(len(data_list))]
+
+    if quiet:
+        theiter = range(1, datalen)
+    else:
+        theiter = tqdm(range(1, datalen))
+    for idx in theiter:
+        for data_idx, data in enumerate(data_list):
+            current_time = data.index[idx].time()
+            if not data.daily:
+                if (current_time < market_start_time) or (current_time > market_end_time):
+                    # Skip trading in pre/aftermarket hours
+                    all_equity_curves[data_idx][idx] = all_current_profits[data_idx]
+                    continue
+            if (idx <= int(train_set_end * datalen)) and skip_train:
+                continue
+            if (idx > int(train_set_end * datalen)) and (idx <= int(val_set_end * len(data))) and skip_val:
+                continue
+            if (idx > int(val_set_end * datalen)) and skip_test:
+                continue
+
+            action, confidence = strategy.next(idx, data)
+
+            entry_price = data.iloc[idx]['Open']
+            exit_price = data.iloc[idx]['Close']
+
+            shares = int(position_value / entry_price)
+
+            if action == 'buy':
+                profit = (exit_price - entry_price - slippage) * shares - commission
+            elif action == 'sell':
+                profit = (entry_price - exit_price - slippage) * shares - commission
+            elif action == 'none':
+                profit = 0.0
+            else:
+                raise ValueError(f"Invalid action '{action}' at index {idx}")
+
+            all_current_profits[data_idx] += profit
+            all_equity_curves[data_idx][idx] = all_current_profits[data_idx]
+            if action != 'none':
+                all_trades[data_idx].append({
+                    'pos': action,
+                    'conf': confidence,
+                    'shares': shares,
+                    'entry_datetime': data.index[idx],
+                    'exit_datetime': data.index[idx],
+                    'entry_bar': idx,
+                    'exit_bar': idx,
+                    'entry_price': entry_price,
+                    'exit_price': exit_price,
+                    'profit': profit
+                })
+
+    return all_equity_curves, [compute_stats(data, trades) for data,trades in zip(data_idx, all_trades)]
+
+
 def get_winner_pct(trades):
     if len(trades) > 0:
         winners = (len(trades.loc[trades['profit'].values >= 0.0]) / len(trades)) * 100.0
@@ -1005,7 +1073,7 @@ def compute_stats(data, trades):
 def qbacktest(clf, scaler, data, quiet=0, reverse=False, window_size=1, min_confidence=0.0, **kwargs):
     s = MLClassifierStrategy(clf, list(data.filter(like='X')), scaler, min_confidence=min_confidence,
                              window_size=window_size, reverse=reverse)
-    equity, pf, trades = backtest_ml_strategy(s, data, quiet=quiet, **kwargs)
+    equity, pf, trades = backtest_strategy_single(s, data, quiet=quiet, **kwargs)
     if not quiet:
         plt.plot(equity)
         plt.xlabel('Bar #')
@@ -1016,7 +1084,7 @@ def qbacktest(clf, scaler, data, quiet=0, reverse=False, window_size=1, min_conf
 
 def rbacktest(reg, scaler, data, quiet=0, reverse=False, **kwargs):
     s = MLRegressorStrategy(reg, list(data.filter(like='X')), scaler, reverse=reverse)
-    equity, pf, trades = backtest_ml_strategy(s, data, quiet=quiet, **kwargs)
+    equity, pf, trades = backtest_strategy_single(s, data, quiet=quiet, **kwargs)
     if not quiet:
         plt.plot(equity)
         plt.xlabel('Bar #')
