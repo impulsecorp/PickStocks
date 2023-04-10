@@ -994,42 +994,43 @@ def backtest_strategy_multi(strategy, data_list, skip_train=1, skip_val=0, skip_
     else:
         theiter = tqdm(range(1, datalen))
     for idx in theiter:
+
+        current_time = data_list[0].index[idx].time()
+        if not data_list[0].daily:
+            if (current_time < market_start_time) or (current_time > market_end_time):
+                # Skip trading in pre/aftermarket hours
+                for data_idx in range(datalen): all_equity_curves[data_idx][idx] = all_current_profits[data_idx]
+                continue
+        if (idx <= int(train_set_end * datalen)) and skip_train:
+            continue
+        if (idx > int(train_set_end * datalen)) and (idx <= int(val_set_end * datalen)) and skip_val:
+            continue
+        if (idx > int(val_set_end * datalen)) and skip_test:
+            continue
+
+        actions, confidences = strategy.next(idx, data_list)
+
         for data_idx, data in enumerate(data_list):
-            current_time = data.index[idx].time()
-            if not data.daily:
-                if (current_time < market_start_time) or (current_time > market_end_time):
-                    # Skip trading in pre/aftermarket hours
-                    all_equity_curves[data_idx][idx] = all_current_profits[data_idx]
-                    continue
-            if (idx <= int(train_set_end * datalen)) and skip_train:
-                continue
-            if (idx > int(train_set_end * datalen)) and (idx <= int(val_set_end * len(data))) and skip_val:
-                continue
-            if (idx > int(val_set_end * datalen)) and skip_test:
-                continue
-
-            action, confidence = strategy.next(idx, data)
-
             entry_price = data.iloc[idx]['Open']
             exit_price = data.iloc[idx]['Close']
 
             shares = int(position_value / entry_price)
 
-            if action == 'buy':
+            if actions[data_idx] == 'buy':
                 profit = (exit_price - entry_price - slippage) * shares - commission
-            elif action == 'sell':
+            elif actions[data_idx] == 'sell':
                 profit = (entry_price - exit_price - slippage) * shares - commission
-            elif action == 'none':
+            elif actions[data_idx] == 'none':
                 profit = 0.0
             else:
-                raise ValueError(f"Invalid action '{action}' at index {idx}")
+                raise ValueError(f"Invalid action '{actions[data_idx]}' at index {idx}")
 
             all_current_profits[data_idx] += profit
             all_equity_curves[data_idx][idx] = all_current_profits[data_idx]
-            if action != 'none':
+            if actions[data_idx] != 'none':
                 all_trades[data_idx].append({
-                    'pos': action,
-                    'conf': confidence,
+                    'pos': actions[data_idx],
+                    'conf': confidences[data_idx],
                     'shares': shares,
                     'entry_datetime': data.index[idx],
                     'exit_datetime': data.index[idx],
