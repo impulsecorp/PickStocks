@@ -1040,7 +1040,7 @@ def backtest_strategy_multi(strategy, data_list, skip_train=1, skip_val=0, skip_
                     'profit': profit
                 })
 
-    return all_equity_curves, [compute_stats(data, trades) for data,trades in zip(data_idx, all_trades)]
+    return all_equity_curves, [compute_stats(data, trades) for data,trades in zip(data_list, all_trades)]
 
 
 def get_winner_pct(trades):
