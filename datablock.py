@@ -164,7 +164,7 @@ def compute_custom_features_llm(data, open_, high, low, close, uchar):
         last_date = date
         last_move = move
     # Add the "X times in row" column to the DataFrame
-    data['Up times in a row'] = x_in_row
+    data['Times in a row Up'] = x_in_row
 
     x_in_row = []
     count = 0
@@ -183,7 +183,7 @@ def compute_custom_features_llm(data, open_, high, low, close, uchar):
         last_date = date
         last_move = move
     # Add the "X times in row" column to the DataFrame
-    data['Down times in a row'] = x_in_row
+    data['Times in a row Down'] = x_in_row
 
     # Compute the overnight move direction
     data['Direction of overnight move'] = np.where(data['Overnight price move'] > 0, 1, -1)
@@ -630,23 +630,23 @@ def procdata_llm(ddd, use_forex=False, double_underscore=True, cut_first_N=-1,
     if 1:
         addx(ta.adx(high, low, close, length=14))
         addx(ta.atr(high, low, close, length=14))
-        addx(ta.bbands(close, length=14, std=2))
+        # addx(ta.bbands(close, length=14, std=2))
         addx(ta.cci(high, low, close, length=14, c=0.015))
-        addx(ta.cmo(close, length=14))
-        addx(ta.decay(close, kind='linear', length=14))
-        addx(ta.ema(close, length=14))
-        addx(ta.entropy(close, length=14))
-        addx(ta.macd(close, fast=8, slow=16, signal=6))
-        addx(ta.mom(close, length=14))
-        addx(ta.natr(high, low, close, length=14))
-        addx(ta.rma(close, length=14))
-        addx(ta.roc(close, length=14))
+        # addx(ta.cmo(close, length=14))
+        # addx(ta.decay(close, kind='linear', length=14))
+        # addx(ta.ema(close, length=14))
+        # addx(ta.entropy(close, length=14))
+        # addx(ta.macd(close, fast=8, slow=16, signal=6))
+        # addx(ta.mom(close, length=14))
+        # addx(ta.natr(high, low, close, length=14))
+        # addx(ta.rma(close, length=14))
+        # addx(ta.roc(close, length=14))
         addx(ta.rsi(close, length=14))
-        addx(ta.rsx(close, length=14))
+        # addx(ta.rsx(close, length=14))
         addx(ta.sma(close, length=14))
-        addx(ta.stoch(high, low, close, k=14, d=3, smooth_k=3))
-        addx(ta.stochrsi(close, length=14, rsi_length=14, k=3, d=3))
-        addx(ta.supertrend(high, low, close, length=7, multiplier=3))
+        # addx(ta.stoch(high, low, close, k=14, d=3, smooth_k=3))
+        # addx(ta.stochrsi(close, length=14, rsi_length=14, k=3, d=3))
+        # addx(ta.supertrend(high, low, close, length=7, multiplier=3))
         addx(ta.willr(high, low, close, length=14))
 
     data = data.rename({'X__Open': 'Open',
