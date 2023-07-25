@@ -104,6 +104,98 @@ def compute_custom_features(data, open_, high, low, close, uchar):
     data['X' + uchar + 'f6'] = np.where((open_ > np.minimum(yesterday_open, yesterday_close)) &
                                         (open_ < np.maximum(yesterday_open, yesterday_close)), 1, 0)
 
+
+def compute_custom_features_llm(data, open_, high, low, close, uchar):
+    # Some datetime features for good measure
+    data['Day of week'] = data.index.dayofweek
+    if not data.daily:
+        data['Hour of day'] = data.index.hour
+    # Additional custom features
+    # Convert the index to datetime and create a temporary date variable
+    dix = pd.to_datetime(data.index)
+    dates = dix.date
+
+    # Calculate the "overnight move" indicator
+    overnight_move = []
+    last_open = None
+    overnight = 0
+    for i, (xopen_, date) in enumerate(zip(open_.values, dates)):
+        if (i > 0) and (date != dates[i - 1]):
+            overnight = xopen_ - last_open
+        overnight_move.append(overnight)
+        last_open = xopen_
+        # Add the "overnight move" column to the DataFrame
+    data['Overnight price move'] = overnight_move
+
+    # b = open_.values[1:] - open_.values[0:-1]
+    # b = np.hstack([np.zeros(1), b])
+    # data['X' + uchar + 'open_move'] = b
+    # b = high.shift(1).values[1:] - high.shift(1).values[0:-1]
+    # b = np.hstack([np.zeros(1), b])
+    # data['X' + uchar + 'high_move'] = b
+    # b = low.shift(1).values[1:] - low.shift(1).values[0:-1]
+    # b = np.hstack([np.zeros(1), b])
+    # data['X' + uchar + 'low_move'] = b
+    # b = close.shift(1).values[1:] - close.shift(1).values[0:-1]
+    # b = np.hstack([np.zeros(1), b])
+    # data['X' + uchar + 'close_move'] = b
+    #
+    b = close.shift(1).values - open_.shift(1).values
+    data['Last price move'] = b
+    b = high.shift(1).values - low.shift(1).values
+    data['Last High-Low span'] = b
+
+    # times in row
+    # Calculate the "X times in row" indicator
+    x_in_row = []
+    count = 0
+    last_move = 0
+    last_date = None
+    for i, move in enumerate(data['Last price move'].values):
+        if move * last_move > 0 and move != 0:
+            count += 1
+        else:
+            count = 0
+        date = dates[i]
+        if not data.daily:
+            if date != last_date:
+                count = 0
+        x_in_row.append(count)
+        last_date = date
+        last_move = move
+    # Add the "X times in row" column to the DataFrame
+    data['Up times in a row'] = x_in_row
+
+    x_in_row = []
+    count = 0
+    last_move = 0
+    last_date = None
+    for i, move in enumerate(data['Last price move'].values):
+        if move * last_move < 0 and move != 0:
+            count += 1
+        else:
+            count = 0
+        date = dates[i]
+        if not data.daily:
+            if date != last_date:
+                count = 0
+        x_in_row.append(count)
+        last_date = date
+        last_move = move
+    # Add the "X times in row" column to the DataFrame
+    data['Down times in a row'] = x_in_row
+
+    # Compute the overnight move direction
+    data['Direction of overnight move'] = np.where(data['Overnight price move'] > 0, 1, -1)
+
+    # Compute yesterday's close-to-open move
+    yesterday_close = close.shift(1)
+    yesterday_open = open_.shift(1)
+
+    data["Yesterday's Close-to-Open move"] = yesterday_open - yesterday_close
+
+
+
 didx = 0
 data = None
 dindex = None
@@ -487,3 +579,92 @@ def procdata_lite(ddd, use_forex=False, double_underscore=True, cut_first_N=-1,
     return data
 
 
+def procdata_llm(ddd, use_forex=False, double_underscore=True, cut_first_N=-1,
+                  with_lagged=0):
+    global data, dindex
+
+    daily = ddd.daily
+
+    if not daily:
+        ddd = ddd.between_time('09:30', '16:00')
+
+    data = ddd
+    dindex = ddd.index
+
+    print('Computing features..', end=' ')
+
+    uchar = '__' if double_underscore else '_'
+
+    def addx(x):
+        global data, didx, dindex
+        if len(x.shape) > 1:
+            dx = x.rename(lambda k: k.upper(), axis=1)
+            data = pd.concat([data, dx], axis=1)
+            data.index = dindex
+        else:
+            didx += 1
+            data[x.name.upper()] = x
+            data.index = dindex
+        data.daily = daily
+
+    open_ = data.open.shift(1)
+    high = data.high.shift(1)
+    low = data.low.shift(1)
+    close = data.close.shift(1)
+    if not use_forex: volume = data.volume.shift(1)
+
+    if not use_forex:
+        data = data.rename({'open': 'X' + uchar + 'Open',
+                            'high': 'X' + uchar + 'High',
+                            'low': 'X' + uchar + 'Low',
+                            'close': 'X' + uchar + 'Close',
+                            'volume': 'X' + uchar + 'Volume',
+                            }, axis=1)
+    else:
+        data = data.rename({'open': 'X' + uchar + 'Open',
+                            'high': 'X' + uchar + 'High',
+                            'low': 'X' + uchar + 'Low',
+                            'close': 'X' + uchar + 'Close',
+                            }, axis=1)
+
+    if 1:
+        addx(ta.adx(high, low, close, length=14))
+        addx(ta.atr(high, low, close, length=14))
+        addx(ta.bbands(close, length=14, std=2))
+        addx(ta.cci(high, low, close, length=14, c=0.015))
+        addx(ta.cmo(close, length=14))
+        addx(ta.decay(close, kind='linear', length=14))
+        addx(ta.ema(close, length=14))
+        addx(ta.entropy(close, length=14))
+        addx(ta.macd(close, fast=8, slow=16, signal=6))
+        addx(ta.mom(close, length=14))
+        addx(ta.natr(high, low, close, length=14))
+        addx(ta.rma(close, length=14))
+        addx(ta.roc(close, length=14))
+        addx(ta.rsi(close, length=14))
+        addx(ta.rsx(close, length=14))
+        addx(ta.sma(close, length=14))
+        addx(ta.stoch(high, low, close, k=14, d=3, smooth_k=3))
+        addx(ta.stochrsi(close, length=14, rsi_length=14, k=3, d=3))
+        addx(ta.supertrend(high, low, close, length=7, multiplier=3))
+        addx(ta.willr(high, low, close, length=14))
+
+    data = data.rename({'X__Open': 'Open',
+                        'X__High': 'High',
+                        'X__Low': 'Low',
+                        'X__Close': 'Close',
+                        'X__Volume': 'Volume',
+                        }, axis=1)
+
+    data.daily = daily
+    compute_custom_features_llm(data, open_, high, low, close, uchar)
+
+    data.replace([np.inf, -np.inf], np.nan, inplace=True)
+    data = data.fillna(0).astype(float)
+
+    # cut off the first N rows, because they are likely nans
+    if cut_first_N > 0: data = data[cut_first_N:]
+
+    data.daily = daily
+    print('Done.')
+    return data
